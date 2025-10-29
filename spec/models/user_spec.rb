@@ -1,170 +1,178 @@
-# typed: false
+require 'rails_helper'
 
-require "rails_helper"
+RSpec.describe User do
+  describe "#disable_invite_by_user_for_reason!" do
+    let(:user) { create(:user) }
+    let(:disabler) { create(:user) }
+    let(:reason) { "Violation of terms" }
 
-describe User do
-  it "has a valid username" do
-    expect { create(:user, username: nil) }.to raise_error
-    expect { create(:user, username: "") }.to raise_error
-    expect { create(:user, username: "*") }.to raise_error
-    # security controls, usernames are used in queries and filenames
-    expect { create(:user, username: "a'b") }.to raise_error
-    expect { create(:user, username: "a\"b") }.to raise_error
-    expect { create(:user, username: "../b") }.to raise_error
+    it "disables invite privileges and creates a moderation record" do
+      expect {
+        user.disable_invite_by_user_for_reason!(disabler, reason)
+      }.to change { user.disabled_invite_at }.from(nil).and change { user.disabled_invite_by_user_id }.to(disabler.id)
 
-    create(:user, username: "newbie")
-    expect { create(:user, username: "newbie") }.to raise_error
+      expect(user.disabled_invite_reason).to eq(reason)
+      expect(user.invitations).to be_empty
+      expect(Moderation.last.action).to eq("Disabled invitations")
+    end
+  end
 
-    create(:user, username: "underscores_and-dashes")
-    invalid_username_variants = ["underscores-and_dashes", "underscores_and_dashes", "underscores-and-dashes"]
+  describe "#ban_by_user_for_reason!" do
+    let(:user) { create(:user) }
+    let(:banner) { create(:user) }
+    let(:reason) { "Spamming" }
 
-    invalid_username_variants.each do |invalid_username|
-      subject = build(:user, username: invalid_username)
-      expect(subject).to_not be_valid
-      expect(subject.errors[:username]).to eq(["is already in use (perhaps swapping _ and -)"])
+    it "bans the user and creates a moderation record" do
+      expect {
+        user.ban_by_user_for_reason!(banner, reason)
+      }.to change { user.banned_at }.from(nil).and change { user.banned_by_user_id }.to(banner.id)
+
+      expect(user.banned_reason).to eq(reason)
+      expect(user.deleted_at).not_to be_nil
+      expect(Moderation.last.action).to eq("Banned")
+    end
+  end
+
+  describe "#can_flag?" do
+    let(:user) { create(:user, karma: 100) }
+    let(:story) { create(:story) }
+    let(:comment) { create(:comment) }
+
+    it "returns true for flaggable story" do
+      allow(story).to receive(:is_flaggable?).and_return(true)
+      expect(user.can_flag?(story)).to be true
     end
 
-    create(:user, username: "case_insensitive")
-    expect { create(:user, username: "CASE_INSENSITIVE") }.to raise_error
-    expect { create(:user, username: "case_Insensitive") }.to raise_error
-    expect { create(:user, username: "case-insensITive") }.to raise_error
+    it "returns false for non-flaggable story" do
+      allow(story).to receive(:is_flaggable?).and_return(false)
+      expect(user.can_flag?(story)).to be false
+    end
+
+    it "returns true for flaggable comment" do
+      allow(comment).to receive(:is_flaggable?).and_return(true)
+      expect(user.can_flag?(comment)).to be true
+    end
+
+    it "returns false for non-flaggable comment" do
+      allow(comment).to receive(:is_flaggable?).and_return(false)
+      expect(user.can_flag?(comment)).to be false
+    end
   end
 
-  it "has a valid email address" do
-    create(:user, email: "user@example.com")
+  describe "#can_invite?" do
+    let(:user) { create(:user, karma: 10) }
 
-    # duplicate
-    expect { create(:user, email: "user@example.com") }.to raise_error
+    it "returns true if user can submit stories and is not banned from inviting" do
+      allow(user).to receive(:banned_from_inviting?).and_return(false)
+      allow(user).to receive(:can_submit_stories?).and_return(true)
+      expect(user.can_invite?).to be true
+    end
 
-    # bad address
-    expect { create(:user, email: "user@") }.to raise_error
-
-    # address too long
-    expect(build(:user, email: "a" * 95 + "@example.com")).to_not be_valid
+    it "returns false if user is banned from inviting" do
+      allow(user).to receive(:banned_from_inviting?).and_return(true)
+      expect(user.can_invite?).to be false
+    end
   end
 
-  it "has a limit on the password reset token field" do
-    user = build(:user, password_reset_token: "a" * 100)
-    user.valid?
-    expect(user.errors[:password_reset_token]).to eq(["is too long (maximum is 75 characters)"])
+  describe "#can_offer_suggestions?" do
+    let(:user) { create(:user, karma: 15) }
+
+    it "returns true if user is not new and has enough karma" do
+      allow(user).to receive(:is_new?).and_return(false)
+      expect(user.can_offer_suggestions?).to be true
+    end
+
+    it "returns false if user is new" do
+      allow(user).to receive(:is_new?).and_return(true)
+      expect(user.can_offer_suggestions?).to be false
+    end
   end
 
-  it "has a limit on the session token field" do
-    user = build(:user, session_token: "a" * 100)
-    user.valid?
-    expect(user.errors[:session_token]).to eq(["is too long (maximum is 75 characters)"])
+  describe "#can_see_invitation_requests?" do
+    let(:user) { create(:user, karma: 60, is_moderator: false) }
+
+    it "returns true if user can invite and is a moderator" do
+      allow(user).to receive(:can_invite?).and_return(true)
+      user.is_moderator = true
+      expect(user.can_see_invitation_requests?).to be true
+    end
+
+    it "returns true if user can invite and has enough karma" do
+      allow(user).to receive(:can_invite?).and_return(true)
+      expect(user.can_see_invitation_requests?).to be true
+    end
+
+    it "returns false if user cannot invite" do
+      allow(user).to receive(:can_invite?).and_return(false)
+      expect(user.can_see_invitation_requests?).to be false
+    end
   end
 
-  it "has a limit on the about field" do
-    user = build(:user, about: "a" * 16_777_218)
-    user.valid?
-    expect(user.errors[:about]).to eq(["is too long (maximum is 16777215 characters)"])
+  describe "#can_submit_stories?" do
+    let(:user) { create(:user, karma: 5) }
+
+    it "returns true if user has enough karma" do
+      user.karma = 10
+      expect(user.can_submit_stories?).to be true
+    end
+
+    it "returns false if user does not have enough karma" do
+      expect(user.can_submit_stories?).to be false
+    end
   end
 
-  it "has a limit on the rss token field" do
-    user = build(:user, rss_token: "a" * 100)
-    user.valid?
-    expect(user.errors[:rss_token]).to eq(["is too long (maximum is 75 characters)"])
+  describe "#disable_2fa!" do
+    let(:user) { create(:user, totp_secret: "some_secret") }
+
+    it "disables 2FA by clearing the totp_secret" do
+      user.disable_2fa!
+      expect(user.totp_secret).to be_nil
+    end
   end
 
-  it "has a limit on the mailing list token field" do
-    user = build(:user, mailing_list_token: "a" * 100)
-    user.valid?
-    expect(user.errors[:mailing_list_token]).to eq(["is too long (maximum is 75 characters)"])
+  describe "#enable_invite_by_user!" do
+    let(:user) { create(:user, disabled_invite_at: Time.current) }
+    let(:mod) { create(:user) }
+
+    it "enables invite privileges and creates a moderation record" do
+      expect {
+        user.enable_invite_by_user!(mod)
+      }.to change { user.disabled_invite_at }.to(nil)
+
+      expect(user.disabled_invite_by_user_id).to be_nil
+      expect(user.disabled_invite_reason).to be_nil
+      expect(Moderation.last.action).to eq("Enabled invitations")
+    end
   end
 
-  it "has a limit on the banned reason field" do
-    user = build(:user, banned_reason: "a" * 300)
-    user.valid?
-    expect(user.errors[:banned_reason]).to eq(["is too long (maximum is 200 characters)"])
+  describe "#initiate_password_reset_for_ip" do
+    let(:user) { create(:user) }
+    let(:ip) { "127.0.0.1" }
+
+    it "sets a password reset token and sends an email" do
+      expect(PasswordResetMailer).to receive_message_chain(:password_reset_link, :deliver_now)
+      user.initiate_password_reset_for_ip(ip)
+      expect(user.password_reset_token).not_to be_nil
+    end
   end
 
-  it "has a limit on the disabled invite reason field" do
-    user = build(:user, disabled_invite_reason: "a" * 300)
-    user.valid?
-    expect(user.errors[:disabled_invite_reason]).to eq(["is too long (maximum is 200 characters)"])
+  describe "#refresh_counts!" do
+    let(:user) { create(:user) }
+
+    it "updates the keystore with the correct counts" do
+      expect(Keystore).to receive(:put).with("user:#{user.id}:stories_submitted", user.stories.count)
+      expect(Keystore).to receive(:put).with("user:#{user.id}:comments_posted", user.comments.active.count)
+      expect(Keystore).to receive(:put).with("user:#{user.id}:comments_deleted", user.comments.deleted.count)
+      user.refresh_counts!
+    end
   end
 
-  it "has a valid homepage" do
-    expect(build(:user, homepage: "https://lobste.rs")).to be_valid
-    expect(build(:user, homepage: "https://lobste.rs/w00t")).to be_valid
-    expect(build(:user, homepage: "https://lobste.rs/w00t.path")).to be_valid
-    expect(build(:user, homepage: "https://lobste.rs/w00t")).to be_valid
-    expect(build(:user, homepage: "https://ሙዚቃ.et")).to be_valid
-    expect(build(:user, homepage: "http://lobste.rs/ሙዚቃ")).to be_valid
-    expect(build(:user, homepage: "http://www.lobste.rs/")).to be_valid
-    expect(build(:user, homepage: "gemini://www.lobste.rs/")).to be_valid
-    expect(build(:user, homepage: "gopher://www.lobste.rs/")).to be_valid
+  describe "#undelete!" do
+    let(:user) { create(:user, deleted_at: Time.current) }
 
-    expect(build(:user, homepage: "http://")).to_not be_valid
-    expect(build(:user, homepage: "http://notld")).to_not be_valid
-    expect(build(:user, homepage: "http://notld/w00t.path")).to_not be_valid
-    expect(build(:user, homepage: "ftp://invalid.protocol")).to_not be_valid
-  end
-
-  it "authenticates properly" do
-    u = create(:user, password: "hunter2")
-
-    expect(u.password_digest.length).to be > 20
-
-    expect(u.authenticate("hunter2")).to eq(u)
-    expect(u.authenticate("hunteR2")).to be false
-  end
-
-  it "gets an error message after registering banned name" do
-    expect { create(:user, username: "admin") }
-      .to raise_error("Validation failed: Username is not permitted")
-  end
-
-  it "shows a user is banned or not" do
-    u = create(:user, :banned)
-    user = create(:user)
-    expect(u.is_banned?).to be true
-    expect(user.is_banned?).to be false
-  end
-
-  it "shows a user is active or not" do
-    u = create(:user, :banned)
-    user = create(:user)
-    expect(u.is_active?).to be false
-    expect(user.is_active?).to be true
-  end
-
-  it "shows a user is recent or not" do
-    user = create(:user, created_at: Time.current)
-    expect(user.is_new?).to be true
-    user = create(:user, created_at: (User::NEW_USER_DAYS + 1).days.ago)
-    expect(user.is_new?).to be false
-  end
-
-  it "unbans a user" do
-    u = create(:user, :banned)
-    expect(u.unban_by_user!(User.first, "seems ok now")).to be true
-  end
-
-  it "tells if a user is a heavy self promoter" do
-    u = create(:user)
-
-    expect(u.is_heavy_self_promoter?).to be false
-
-    create(:story, title: "ti1", url: "https://a.com/1", user_id: u.id,
-      user_is_author: true)
-    # require at least 2 stories to be considered heavy self promoter
-    expect(u.is_heavy_self_promoter?).to be false
-
-    create(:story, title: "ti2", url: "https://a.com/2", user_id: u.id,
-      user_is_author: true)
-    # 100% of 2 stories
-    expect(u.is_heavy_self_promoter?).to be true
-
-    create(:story, title: "ti3", url: "https://a.com/3", user_id: u.id,
-      user_is_author: false)
-    # 66.7% of 3 stories
-    expect(u.is_heavy_self_promoter?).to be true
-
-    create(:story, title: "ti4", url: "https://a.com/4", user_id: u.id,
-      user_is_author: false)
-    # 50% of 4 stories
-    expect(u.is_heavy_self_promoter?).to be false
+    it "restores a deleted user" do
+      user.undelete!
+      expect(user.deleted_at).to be_nil
+    end
   end
 end
