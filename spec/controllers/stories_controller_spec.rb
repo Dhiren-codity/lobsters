@@ -272,7 +272,7 @@ RSpec.describe StoriesController do
     context 'when URL is missing' do
       it 'raises an error' do
         expect {
-          post :check_url_dupe, params: { story: { url: '' } }
+          post :check_url_dupe, params: { story: { url: nil } }
         }.to raise_error(ActionController::ParameterMissing)
       end
     end
