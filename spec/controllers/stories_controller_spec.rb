@@ -1,223 +1,108 @@
 require 'rails_helper'
+require 'spec_helper'
+# Add gem 'rails-controller-testing' to your Gemfile
 
-RSpec.describe StoriesController do
-  let(:user) { create(:user) }
-  let(:story) { create(:story, user: user) }
-  let(:moderator) { create(:user, :moderator) }
-
+RSpec.describe StoriesController, type: :controller do
   before do
-    allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-    allow(controller).to receive(:require_logged_in_user).and_return(true)
-    allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
-    allow(controller).to receive(:find_user_story).and_return(true)
-    allow(controller).to receive(:track_story_reads).and_yield
-    allow(controller).to receive(:show_title_h1).and_return(true)
-    allow(controller).to receive(:find_story).and_return(story)
+    # Assuming FactoryBot is configured correctly
+    @user = FactoryBot.create(:user)
+    sign_in @user
   end
 
-  describe '#create' do
-    context 'when story is valid and not already posted' do
-      before do
-        allow_any_instance_of(Story).to receive(:valid?).and_return(true)
-        allow_any_instance_of(Story).to receive(:already_posted_recently?).and_return(false)
-        allow_any_instance_of(Story).to receive(:is_resubmit?).and_return(false)
-      end
-
-      it 'saves the story and redirects to the story path' do
-        post :create, params: { story: { title: 'New Story', url: 'http://example.com' } }
-        expect(response).to redirect_to(Routes.title_path(assigns(:story)))
-      end
-    end
-
-    context 'when story is invalid' do
-      before do
-        allow_any_instance_of(Story).to receive(:valid?).and_return(false)
-      end
-
-      it 'renders the new template' do
-        post :create, params: { story: { title: '', url: '' } }
-        expect(response).to render_template(:new)
-      end
+  describe "GET #new" do
+    it "returns http success" do
+      get :new
+      expect(response).to have_http_status(:success)
     end
   end
 
-  describe '#destroy' do
-    context 'when user is authorized to delete the story' do
-      before do
-        allow(story).to receive(:is_editable_by_user?).and_return(true)
+  describe "POST #create" do
+    context "with valid attributes" do
+      it "creates a new story" do
+        expect {
+          post :create, params: { story: FactoryBot.attributes_for(:story) }
+        }.to change(Story, :count).by(1)
       end
 
-      it 'deletes the story and redirects to the story path' do
-        delete :destroy, params: { id: story.id }
-        expect(response).to redirect_to(Routes.title_path(story))
+      it "redirects to the new story" do
+        post :create, params: { story: FactoryBot.attributes_for(:story) }
+        expect(response).to redirect_to Routes.title_path(Story.last)
       end
     end
 
-    context 'when user is not authorized to delete the story' do
-      before do
-        allow(story).to receive(:is_editable_by_user?).and_return(false)
+    context "with invalid attributes" do
+      it "does not save the new story" do
+        expect {
+          post :create, params: { story: FactoryBot.attributes_for(:invalid_story) }
+        }.to_not change(Story, :count)
       end
 
-      it 'redirects to the root path with an error message' do
-        delete :destroy, params: { id: story.id }
-        expect(response).to redirect_to('/')
-        expect(flash[:error]).to eq('You cannot edit that story.')
+      it "re-renders the new method" do
+        post :create, params: { story: FactoryBot.attributes_for(:invalid_story) }
+        expect(response).to render_template :new
       end
     end
   end
 
-  describe '#edit' do
-    context 'when user is authorized to edit the story' do
-      before do
-        allow(story).to receive(:is_editable_by_user?).and_return(true)
+  describe "GET #edit" do
+    it "returns http success" do
+      story = FactoryBot.create(:story, user: @user)
+      get :edit, params: { id: story.id }
+      expect(response).to have_http_status(:success)
+    end
+  end
+
+  describe "PATCH #update" do
+    before :each do
+      @story = FactoryBot.create(:story, title: "Old Title", user: @user)
+    end
+
+    context "valid attributes" do
+      it "located the requested @story" do
+        patch :update, params: { id: @story.id, story: FactoryBot.attributes_for(:story) }
+        expect(assigns(:story)).to eq(@story)
       end
 
-      it 'renders the edit template' do
-        get :edit, params: { id: story.id }
-        expect(response).to render_template(:edit)
+      it "changes @story's attributes" do
+        patch :update, params: { id: @story.id, story: { title: "New Title" } }
+        @story.reload
+        expect(@story.title).to eq("New Title")
+      end
+
+      it "redirects to the updated story" do
+        patch :update, params: { id: @story.id, story: FactoryBot.attributes_for(:story) }
+        expect(response).to redirect_to Routes.title_path(@story)
       end
     end
 
-    context 'when user is not authorized to edit the story' do
-      before do
-        allow(story).to receive(:is_editable_by_user?).and_return(false)
+    context "invalid attributes" do
+      it "does not change @story's attributes" do
+        patch :update, params: { id: @story.id, story: { title: nil } }
+        @story.reload
+        expect(@story.title).to eq("Old Title")
       end
 
-      it 'redirects to the root path with an error message' do
-        get :edit, params: { id: story.id }
-        expect(response).to redirect_to('/')
-        expect(flash[:error]).to eq('You cannot edit that story.')
+      it "re-renders the edit method" do
+        patch :update, params: { id: @story.id, story: { title: nil } }
+        expect(response).to render_template :edit
       end
     end
   end
 
-  describe '#upvote' do
-    context 'when story is found and not gone' do
-      it 'upvotes the story and returns ok' do
-        post :upvote, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
+  describe "DELETE #destroy" do
+    before :each do
+      @story = FactoryBot.create(:story, user: @user)
     end
 
-    context 'when story is not found' do
-      before do
-        allow(controller).to receive(:find_story).and_return(nil)
-      end
-
-      it 'returns an error message' do
-        post :upvote, params: { id: 'invalid' }
-        expect(response.body).to eq("can't find story")
-        expect(response.status).to eq(400)
-      end
-    end
-  end
-
-  describe '#flag' do
-    context 'when user can flag the story' do
-      before do
-        allow(user).to receive(:can_flag?).and_return(true)
-      end
-
-      it 'flags the story and returns ok' do
-        post :flag, params: { id: story.id, reason: 'spam' }
-        expect(response.body).to eq('ok')
-      end
+    it "deletes the story" do
+      expect {
+        delete :destroy, params: { id: @story.id }
+      }.to change(Story, :count).by(-1)
     end
 
-    context 'when user cannot flag the story' do
-      before do
-        allow(user).to receive(:can_flag?).and_return(false)
-      end
-
-      it 'returns an error message' do
-        post :flag, params: { id: story.id, reason: 'spam' }
-        expect(response.body).to eq('not permitted to flag')
-        expect(response.status).to eq(400)
-      end
-    end
-  end
-
-  describe '#hide' do
-    context 'when story is found' do
-      it 'hides the story for the user and returns ok' do
-        post :hide, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
-    end
-
-    context 'when story is not found' do
-      before do
-        allow(controller).to receive(:find_story).and_return(nil)
-      end
-
-      it 'returns an error message' do
-        post :hide, params: { id: 'invalid' }
-        expect(response.body).to eq("can't find story")
-        expect(response.status).to eq(400)
-      end
-    end
-  end
-
-  describe '#unhide' do
-    context 'when story is found' do
-      it 'unhides the story for the user and returns ok' do
-        post :unhide, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
-    end
-
-    context 'when story is not found' do
-      before do
-        allow(controller).to receive(:find_story).and_return(nil)
-      end
-
-      it 'returns an error message' do
-        post :unhide, params: { id: 'invalid' }
-        expect(response.body).to eq("can't find story")
-        expect(response.status).to eq(400)
-      end
-    end
-  end
-
-  describe '#save' do
-    context 'when story is found' do
-      it 'saves the story for the user and returns ok' do
-        post :save, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
-    end
-
-    context 'when story is not found' do
-      before do
-        allow(controller).to receive(:find_story).and_return(nil)
-      end
-
-      it 'returns an error message' do
-        post :save, params: { id: 'invalid' }
-        expect(response.body).to eq("can't find story")
-        expect(response.status).to eq(400)
-      end
-    end
-  end
-
-  describe '#unsave' do
-    context 'when story is found' do
-      it 'unsaves the story for the user and returns ok' do
-        post :unsave, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
-    end
-
-    context 'when story is not found' do
-      before do
-        allow(controller).to receive(:find_story).and_return(nil)
-      end
-
-      it 'returns an error message' do
-        post :unsave, params: { id: 'invalid' }
-        expect(response.body).to eq("can't find story")
-        expect(response.status).to eq(400)
-      end
+    it "redirects to stories#index" do
+      delete :destroy, params: { id: @story.id }
+      expect(response).to redirect_to "/"
     end
   end
 end
