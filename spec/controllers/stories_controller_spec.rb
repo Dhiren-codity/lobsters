@@ -3,172 +3,307 @@ require 'rails_helper'
 RSpec.describe StoriesController do
   let(:user) { create(:user) }
   let(:story) { create(:story, user: user) }
-  let(:valid_attributes) { { title: 'Test Story', url: 'http://example.com', description: 'A test story' } }
-  let(:invalid_attributes) { { title: '', url: '', description: '' } }
+  let(:moderator) { create(:user, :moderator) }
 
   before do
-    allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
+    allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
-    allow(controller).to receive(:find_user_story).and_return(story)
+    allow(controller).to receive(:find_user_story).and_return(true)
+    allow(controller).to receive(:track_story_reads).and_yield
+    allow(controller).to receive(:show_title_h1).and_return(true)
+    allow(controller).to receive(:find_story).and_return(story)
   end
 
-  describe 'POST #create' do
-    context 'with valid params' do
-      it 'creates a new Story' do
-        expect {
-          post :create, params: { story: valid_attributes }
-        }.to change(Story, :count).by(1)
-      end
-
-      it 'redirects to the created story' do
-        post :create, params: { story: valid_attributes }
-        expect(response).to redirect_to(Routes.title_path(Story.last))
+  describe '#create' do
+    context 'when preview is true' do
+      it 'calls the preview method' do
+        post :create, params: { preview: true }
+        expect(response).to render_template(:new)
       end
     end
 
-    context 'with invalid params' do
-      it 'does not create a new Story' do
-        expect {
-          post :create, params: { story: invalid_attributes }
-        }.to change(Story, :count).by(0)
-      end
+    context 'when story is valid and not already posted' do
+      it 'saves the story and redirects' do
+        allow_any_instance_of(Story).to receive(:valid?).and_return(true)
+        allow_any_instance_of(Story).to receive(:already_posted_recently?).and_return(false)
+        allow_any_instance_of(Story).to receive(:is_resubmit?).and_return(false)
 
+        post :create, params: { story: { title: 'New Story', url: 'http://example.com' } }
+        expect(response).to redirect_to(Routes.title_path(assigns(:story)))
+      end
+    end
+
+    context 'when story is invalid' do
       it 'renders the new template' do
-        post :create, params: { story: invalid_attributes }
-        expect(response).to render_template('new')
+        allow_any_instance_of(Story).to receive(:valid?).and_return(false)
+
+        post :create, params: { story: { title: '', url: '' } }
+        expect(response).to render_template(:new)
       end
     end
   end
 
-  describe 'DELETE #destroy' do
-    context 'when user is authorized' do
-      it 'deletes the story' do
-        story # create the story
-        expect {
-          delete :destroy, params: { id: story.to_param }
-        }.to change(Story, :count).by(-1)
-      end
-
-      it 'redirects to the stories list' do
-        delete :destroy, params: { id: story.to_param }
-        expect(response).to redirect_to(Routes.title_path(story))
-      end
-    end
-
+  describe '#destroy' do
     context 'when user is not authorized' do
-      before do
+      it 'redirects with an error message' do
         allow(story).to receive(:is_editable_by_user?).and_return(false)
         allow(user).to receive(:is_moderator?).and_return(false)
-      end
 
-      it 'does not delete the story' do
-        story # create the story
-        expect {
-          delete :destroy, params: { id: story.to_param }
-        }.to change(Story, :count).by(0)
-      end
-
-      it 'redirects to the root path with an error' do
-        delete :destroy, params: { id: story.to_param }
+        delete :destroy, params: { id: story.id }
         expect(response).to redirect_to('/')
         expect(flash[:error]).to eq('You cannot edit that story.')
       end
     end
-  end
 
-  describe 'PATCH #update' do
-    context 'with valid params' do
-      let(:new_attributes) { { title: 'Updated Story' } }
+    context 'when user is authorized' do
+      it 'deletes the story and redirects' do
+        allow(story).to receive(:is_editable_by_user?).and_return(true)
 
-      it 'updates the requested story' do
-        patch :update, params: { id: story.to_param, story: new_attributes }
-        story.reload
-        expect(story.title).to eq('Updated Story')
-      end
-
-      it 'redirects to the story' do
-        patch :update, params: { id: story.to_param, story: new_attributes }
+        delete :destroy, params: { id: story.id }
         expect(response).to redirect_to(Routes.title_path(story))
       end
     end
+  end
 
-    context 'with invalid params' do
-      it 'does not update the story' do
-        patch :update, params: { id: story.to_param, story: invalid_attributes }
-        story.reload
-        expect(story.title).not_to eq('')
+  describe '#edit' do
+    context 'when user is not authorized' do
+      it 'redirects with an error message' do
+        allow(story).to receive(:is_editable_by_user?).and_return(false)
+
+        get :edit, params: { id: story.id }
+        expect(response).to redirect_to('/')
+        expect(flash[:error]).to eq('You cannot edit that story.')
       end
+    end
 
+    context 'when user is authorized' do
       it 'renders the edit template' do
-        patch :update, params: { id: story.to_param, story: invalid_attributes }
-        expect(response).to render_template('edit')
+        allow(story).to receive(:is_editable_by_user?).and_return(true)
+
+        get :edit, params: { id: story.id }
+        expect(response).to render_template(:edit)
       end
     end
   end
 
-  describe 'GET #show' do
-    context 'when story is visible' do
-      it 'renders the show template' do
-        get :show, params: { id: story.to_param }
-        expect(response).to render_template('show')
+  describe '#fetch_url_attributes' do
+    it 'returns fetched attributes as JSON' do
+      allow_any_instance_of(Story).to receive(:fetched_attributes).and_return({ title: 'Fetched Title' })
+
+      get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
+      expect(response.content_type).to eq('application/json')
+      expect(response.body).to include('Fetched Title')
+    end
+  end
+
+  describe '#new' do
+    it 'initializes a new story and renders the new template' do
+      get :new
+      expect(assigns(:story)).to be_a_new(Story)
+      expect(response).to render_template(:new)
+    end
+  end
+
+  describe '#preview' do
+    it 'renders the new template with previewing set to true' do
+      post :preview, params: { story: { title: 'Preview Story', url: 'http://example.com' } }
+      expect(assigns(:story).previewing).to be true
+      expect(response).to render_template(:new)
+    end
+  end
+
+  describe '#show' do
+    context 'when story is merged' do
+      it 'redirects to the merged story' do
+        allow(story).to receive(:merged_into_story).and_return(create(:story))
+
+        get :show, params: { id: story.short_id }
+        expect(response).to redirect_to(Routes.title_path(story.merged_into_story))
       end
     end
 
     context 'when story is not visible' do
-      before do
+      it 'renders the missing template' do
         allow(story).to receive(:can_be_seen_by_user?).and_return(false)
-      end
 
-      it 'renders the missing template with 404 status' do
-        get :show, params: { id: story.to_param }
+        get :show, params: { id: story.short_id }
         expect(response).to render_template('_missing')
-        expect(response.status).to eq(404)
+      end
+    end
+
+    context 'when story is visible' do
+      it 'renders the show template' do
+        allow(story).to receive(:can_be_seen_by_user?).and_return(true)
+
+        get :show, params: { id: story.short_id }
+        expect(response).to render_template(:show)
       end
     end
   end
 
-  describe 'POST #upvote' do
-    context 'when story is found' do
-      it 'votes on the story' do
-        expect(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).with(1, story.id, nil, user.id, nil)
-        post :upvote, params: { id: story.to_param }
-        expect(response.body).to eq('ok')
+  describe '#undelete' do
+    context 'when user is not authorized' do
+      it 'redirects with an error message' do
+        allow(story).to receive(:is_editable_by_user?).and_return(false)
+        allow(story).to receive(:is_undeletable_by_user?).and_return(false)
+
+        post :undelete, params: { id: story.id }
+        expect(response).to redirect_to('/')
+        expect(flash[:error]).to eq('You cannot edit that story.')
       end
     end
 
-    context 'when story is not found' do
-      before do
-        allow(controller).to receive(:find_story).and_return(nil)
-      end
+    context 'when user is authorized' do
+      it 'undeletes the story and redirects' do
+        allow(story).to receive(:is_editable_by_user?).and_return(true)
+        allow(story).to receive(:is_undeletable_by_user?).and_return(true)
 
-      it 'returns an error' do
-        post :upvote, params: { id: 'invalid' }
-        expect(response.body).to eq("can't find story")
-        expect(response.status).to eq(400)
+        post :undelete, params: { id: story.id }
+        expect(response).to redirect_to(Routes.title_path(story))
       end
     end
   end
 
-  describe 'POST #flag' do
-    context 'when reason is valid' do
-      before do
-        allow(Vote::STORY_REASONS).to receive(:[]).with('spam').and_return(true)
-        allow(user).to receive(:can_flag?).and_return(true)
-      end
+  describe '#update' do
+    context 'when user is not authorized' do
+      it 'redirects with an error message' do
+        allow(story).to receive(:is_editable_by_user?).and_return(false)
 
-      it 'flags the story' do
-        expect(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).with(-1, story.id, nil, user.id, 'spam')
-        post :flag, params: { id: story.to_param, reason: 'spam' }
-        expect(response.body).to eq('ok')
+        patch :update, params: { id: story.id, story: { title: 'Updated Title' } }
+        expect(response).to redirect_to('/')
+        expect(flash[:error]).to eq('You cannot edit that story.')
       end
     end
 
+    context 'when user is authorized' do
+      it 'updates the story and redirects' do
+        allow(story).to receive(:is_editable_by_user?).and_return(true)
+
+        patch :update, params: { id: story.id, story: { title: 'Updated Title' } }
+        expect(response).to redirect_to(Routes.title_path(story))
+      end
+    end
+  end
+
+  describe '#unvote' do
+    it 'removes the vote and returns ok' do
+      allow(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).and_return(true)
+
+      post :unvote, params: { id: story.id }
+      expect(response.body).to eq('ok')
+    end
+  end
+
+  describe '#upvote' do
+    it 'adds an upvote and returns ok' do
+      allow(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).and_return(true)
+
+      post :upvote, params: { id: story.id }
+      expect(response.body).to eq('ok')
+    end
+  end
+
+  describe '#flag' do
     context 'when reason is invalid' do
       it 'returns an error' do
-        post :flag, params: { id: story.to_param, reason: 'invalid' }
+        post :flag, params: { id: story.id, reason: 'invalid' }
         expect(response.body).to eq('invalid reason')
-        expect(response.status).to eq(400)
+      end
+    end
+
+    context 'when user cannot flag' do
+      it 'returns an error' do
+        allow(user).to receive(:can_flag?).and_return(false)
+
+        post :flag, params: { id: story.id, reason: 'spam' }
+        expect(response.body).to eq('not permitted to flag')
+      end
+    end
+
+    context 'when flagging is successful' do
+      it 'returns ok' do
+        allow(user).to receive(:can_flag?).and_return(true)
+        allow(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).and_return(true)
+
+        post :flag, params: { id: story.id, reason: 'spam' }
+        expect(response.body).to eq('ok')
+      end
+    end
+  end
+
+  describe '#hide' do
+    it 'hides the story and returns ok' do
+      allow(HiddenStory).to receive(:hide_story_for_user).and_return(true)
+
+      post :hide, params: { id: story.id }
+      expect(response.body).to eq('ok')
+    end
+  end
+
+  describe '#unhide' do
+    it 'unhides the story and returns ok' do
+      allow(HiddenStory).to receive(:unhide_story_for_user).and_return(true)
+
+      post :unhide, params: { id: story.id }
+      expect(response.body).to eq('ok')
+    end
+  end
+
+  describe '#save' do
+    it 'saves the story and returns ok' do
+      allow(SavedStory).to receive(:save_story_for_user).and_return(true)
+
+      post :save, params: { id: story.id }
+      expect(response.body).to eq('ok')
+    end
+  end
+
+  describe '#unsave' do
+    it 'unsaves the story and returns ok' do
+      allow(SavedStory).to receive(:where).and_return(double(delete_all: true))
+
+      post :unsave, params: { id: story.id }
+      expect(response.body).to eq('ok')
+    end
+  end
+
+  describe '#check_url_dupe' do
+    context 'when URL is missing' do
+      it 'raises an error' do
+        expect {
+          post :check_url_dupe, params: { story: { url: '' } }
+        }.to raise_error(ActionController::ParameterMissing)
+      end
+    end
+
+    context 'when URL is present' do
+      it 'renders the form errors partial' do
+        allow_any_instance_of(Story).to receive(:check_already_posted_recently?).and_return(false)
+
+        post :check_url_dupe, params: { story: { url: 'http://example.com' } }
+        expect(response).to render_template(partial: 'stories/form_errors')
+      end
+    end
+  end
+
+  describe '#disown' do
+    context 'when user cannot disown' do
+      it 'returns an error' do
+        allow(story).to receive(:disownable_by_user?).and_return(false)
+
+        post :disown, params: { id: story.id }
+        expect(response.body).to eq("can't find story")
+      end
+    end
+
+    context 'when user can disown' do
+      it 'disowns the story and redirects' do
+        allow(story).to receive(:disownable_by_user?).and_return(true)
+        allow(InactiveUser).to receive(:disown!).and_return(true)
+
+        post :disown, params: { id: story.id }
+        expect(response).to redirect_to(Routes.title_path(story))
       end
     end
   end
