@@ -1,9 +1,4 @@
-# typed: false
-
 require "rails_helper"
-
-# uses page.driver.post because we're not running a full js engine,
-# so the call can't just be click_on('delete'), etc.
 
 RSpec.feature "Commenting" do
   let(:user) { create(:user) }
@@ -75,7 +70,6 @@ RSpec.feature "Commenting" do
 
   feature "disowning comments" do
     scenario "disowning a comment" do
-      # bypass validations to create inactive-user:
       create(:user, :inactive)
 
       comment = create(:comment, user_id: user.id, story_id: story.id, created_at: 90.days.ago)
