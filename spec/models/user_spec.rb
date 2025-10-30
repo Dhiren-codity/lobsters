@@ -1,19 +1,16 @@
-# typed: false
-
 require "rails_helper"
 
-describe User do
+RSpec.describe User, type: :model do
   it "has a valid username" do
-    expect { create(:user, username: nil) }.to raise_error
-    expect { create(:user, username: "") }.to raise_error
-    expect { create(:user, username: "*") }.to raise_error
-    # security controls, usernames are used in queries and filenames
-    expect { create(:user, username: "a'b") }.to raise_error
-    expect { create(:user, username: "a\"b") }.to raise_error
-    expect { create(:user, username: "../b") }.to raise_error
+    expect { create(:user, username: nil) }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, username: "") }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, username: "*") }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, username: "a'b") }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, username: "a\"b") }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, username: "../b") }.to raise_error(ActiveRecord::RecordInvalid)
 
     create(:user, username: "newbie")
-    expect { create(:user, username: "newbie") }.to raise_error
+    expect { create(:user, username: "newbie") }.to raise_error(ActiveRecord::RecordInvalid)
 
     create(:user, username: "underscores_and-dashes")
     invalid_username_variants = ["underscores-and_dashes", "underscores_and_dashes", "underscores-and-dashes"]
@@ -25,24 +22,18 @@ describe User do
     end
 
     create(:user, username: "case_insensitive")
-    expect { create(:user, username: "CASE_INSENSITIVE") }.to raise_error
-    expect { create(:user, username: "case_Insensitive") }.to raise_error
-    expect { create(:user, username: "case-insensITive") }.to raise_error
+    expect { create(:user, username: "CASE_INSENSITIVE") }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, username: "case_Insensitive") }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, username: "case-insensITive") }.to raise_error(ActiveRecord::RecordInvalid)
   end
 
   it "has a valid email address" do
     create(:user, email: "user@example.com")
 
-    # duplicate
-    expect { create(:user, email: "user@example.com") }.to raise_error
-
-    # bad address
-    expect { create(:user, email: "user@") }.to raise_error
-
-    # address too long
+    expect { create(:user, email: "user@example.com") }.to raise_error(ActiveRecord::RecordInvalid)
+    expect { create(:user, email: "user@") }.to raise_error(ActiveRecord::RecordInvalid)
     expect(build(:user, email: "a" * 95 + "@example.com")).to_not be_valid
 
-    # not a disposable email
     allow(File).to receive(:read).with(FetchEmailBlocklistJob::STORAGE_PATH).and_return("disposable.com")
     expect(build(:user, email: "user@disposable.com")).to_not be_valid
   end
@@ -117,7 +108,7 @@ describe User do
 
   it "gets an error message after registering banned name" do
     expect { create(:user, username: "admin") }
-      .to raise_error("Validation failed: Username is not permitted")
+      .to raise_error(ActiveRecord::RecordInvalid, "Validation failed: Username is not permitted")
   end
 
   it "shows a user is banned or not" do
@@ -153,22 +144,18 @@ describe User do
 
     create(:story, title: "ti1", url: "https://a.com/1", user_id: u.id,
       user_is_author: true)
-    # require at least 2 stories to be considered heavy self promoter
     expect(u.is_heavy_self_promoter?).to be false
 
     create(:story, title: "ti2", url: "https://a.com/2", user_id: u.id,
       user_is_author: true)
-    # 100% of 2 stories
     expect(u.is_heavy_self_promoter?).to be true
 
     create(:story, title: "ti3", url: "https://a.com/3", user_id: u.id,
       user_is_author: false)
-    # 66.7% of 3 stories
     expect(u.is_heavy_self_promoter?).to be true
 
     create(:story, title: "ti4", url: "https://a.com/4", user_id: u.id,
       user_is_author: false)
-    # 50% of 4 stories
     expect(u.is_heavy_self_promoter?).to be false
   end
 end
