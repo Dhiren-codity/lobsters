@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 describe Markdowner do
@@ -31,25 +29,20 @@ describe Markdowner do
 
   it "hyperlinks usernames based on when they existed, not now" do
     user = create :user, username: "alice", created_at: 4.weeks.ago
-    Username.rename! user:, from: "alice", to: "bob", by: user, at: 1.week.ago
+    Username.rename! user: user, from: "alice", to: "bob", by: user, at: 1.week.ago
 
     str = "I like ~alice's code"
-    # user didn't exist yet, so if a comment mentioned, no link
     expect(Markdowner.to_html(str, as_of: 6.weeks.ago)).not_to include("href=")
-    # user existed when comment was written, so create a link
     expect(Markdowner.to_html(str, as_of: 2.weeks.ago)).to include("href=")
-    # user renamed away, so if a comment mentioned now, no link
     expect(Markdowner.to_html(str, as_of: Time.current)).not_to include("href=")
   end
 
-  # bug#209
   it "keeps punctuation inside of auto-generated links when using brackets" do
     expect(Markdowner.to_html("hi <http://example.com/a.> test"))
       .to eq("<p>hi <a href=\"http://example.com/a.\" rel=\"ugc\">" \
             "http://example.com/a.</a> test</p>\n")
   end
 
-  # bug#242
   it "does not expand @ signs inside urls" do
     create(:user, username: "blahblah")
 
@@ -69,28 +62,23 @@ describe Markdowner do
     expect(Markdowner.to_html("[protocol-relative URL](//example.com)"))
       .to eq("<p><a href=\"//example.com\" rel=\"ugc\">protocol-relative URL</a></p>\n")
 
-    # invalid URLs that are still parsed as links (not an exhaustive list)
     expect(Markdowner.to_html("[missing protocol](example.com)"))
       .to eq("<p><a href=\"example.com\" rel=\"ugc\">missing protocol</a></p>\n")
 
     expect(Markdowner.to_html("[wrong number of slashes after protocol](http:/example.com)"))
       .to eq("<p><a href=\"http:/example.com\" rel=\"ugc\">wrong number of slashes after protocol</a></p>\n")
 
-    # relative links
     expect(Markdowner.to_html("[relative link](/example)"))
       .to eq("<p><a href=\"/example\" rel=\"ugc\">relative link</a></p>\n")
 
     expect(Markdowner.to_html("[relative link to user profile](/~abc)"))
       .to eq("<p><a href=\"/~abc\" rel=\"ugc\">relative link to user profile</a></p>\n")
 
-    # autolink
     expect(Markdowner.to_html("www.example.com"))
       .to eq("<p><a href=\"http://www.example.com\" rel=\"ugc\">www.example.com</a></p>\n")
   end
 
   it "escapes raw HTML" do
-    # Examples adapted from https://cheatsheetseries.owasp.org/cheatsheets/XSS_Filter_Evasion_Cheat_Sheet.html
-
     expect(Markdowner.to_html("hi <script src=\"https://lobste.rs\"></script> bye"))
       .to eq("<p>hi &lt;script src=\"https://lobste.rs\"&gt;&lt;/script&gt; bye</p>\n")
 
@@ -104,7 +92,6 @@ describe Markdowner do
       .to eq("<p>hi &lt;iframe src=\"javascript:alert('xss');\"&gt;&lt;/iframe&gt; bye</p>\n")
   end
 
-  # issue #1727
   it "doesn't autolink bare triggers" do
     expect(Markdowner.to_html("hi www. bye"))
       .to eq("<p>hi www. bye</p>\n")
