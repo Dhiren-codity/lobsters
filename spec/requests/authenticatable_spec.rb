@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 describe "Authenticatable", type: :request do
@@ -21,8 +19,6 @@ describe "Authenticatable", type: :request do
       expect(response).to be_successful
     end
 
-    # visitors hit the require_logged_in_user path first;
-    # this is a more useful error for mods who are logged out
     it "doesn't load for a visitor" do
       get "/mod"
       expect(response).to redirect_to("/login")
