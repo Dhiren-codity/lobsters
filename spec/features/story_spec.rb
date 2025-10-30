@@ -1,9 +1,4 @@
-# typed: false
-
 require "rails_helper"
-
-# uses page.driver.post because we're not running a full js engine,
-# so the call can't just be click_on('delete'), etc.
 
 RSpec.feature "Stories" do
   let(:user) { create(:user) }
