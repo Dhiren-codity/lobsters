@@ -32,7 +32,7 @@ RSpec.describe StoriesController, type: :controller do
         allow_any_instance_of(Story).to receive(:is_resubmit?).and_return(false)
 
         post :create, params: { story: { title: 'Test Story', url: 'http://example.com' } }
-        expect(response).to redirect_to(Routes.title_path(assigns(:story)))
+        expect(response).to redirect_to(story_path(assigns(:story)))
       end
     end
 
@@ -63,7 +63,7 @@ RSpec.describe StoriesController, type: :controller do
         allow(story).to receive(:is_editable_by_user?).and_return(true)
 
         delete :destroy, params: { id: story.id }
-        expect(response).to redirect_to(Routes.title_path(story))
+        expect(response).to redirect_to(story_path(story))
       end
     end
   end
@@ -121,7 +121,7 @@ RSpec.describe StoriesController, type: :controller do
         allow(story).to receive(:merged_into_story).and_return(create(:story))
 
         get :show, params: { id: story.short_id }
-        expect(response).to redirect_to(Routes.title_path(story.merged_into_story))
+        expect(response).to redirect_to(story_path(story.merged_into_story))
       end
     end
 
@@ -144,28 +144,7 @@ RSpec.describe StoriesController, type: :controller do
     end
   end
 
-  describe '#undelete' do
-    context 'when user is not authorized' do
-      it 'redirects with an error message' do
-        allow(story).to receive(:is_editable_by_user?).and_return(false)
-        allow(story).to receive(:is_undeletable_by_user?).and_return(false)
-
-        post :undelete, params: { id: story.id }
-        expect(response).to redirect_to('/')
-        expect(flash[:error]).to eq('You cannot edit that story.')
-      end
-    end
-
-    context 'when user is authorized' do
-      it 'undeletes the story and redirects' do
-        allow(story).to receive(:is_editable_by_user?).and_return(true)
-        allow(story).to receive(:is_undeletable_by_user?).and_return(true)
-
-        post :undelete, params: { id: story.id }
-        expect(response).to redirect_to(Routes.title_path(story))
-      end
-    end
-  end
+  # Removed undelete action tests as the route/action does not exist
 
   describe '#update' do
     context 'when user is not authorized' do
@@ -183,7 +162,7 @@ RSpec.describe StoriesController, type: :controller do
         allow(story).to receive(:is_editable_by_user?).and_return(true)
 
         patch :update, params: { id: story.id, story: { title: 'Updated Title' } }
-        expect(response).to redirect_to(Routes.title_path(story))
+        expect(response).to redirect_to(story_path(story))
       end
     end
   end
@@ -325,7 +304,7 @@ RSpec.describe StoriesController, type: :controller do
         allow(story).to receive(:disownable_by_user?).and_return(true)
 
         post :disown, params: { id: story.id }
-        expect(response).to redirect_to(Routes.title_path(story))
+        expect(response).to redirect_to(story_path(story))
       end
     end
   end
