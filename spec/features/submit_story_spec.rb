@@ -1,5 +1,4 @@
 require "rails_helper"
-require "factory_bot_rails"
 
 RSpec.feature "Submitting Stories", type: :feature do
   let(:user) { FactoryBot.create(:user) }
