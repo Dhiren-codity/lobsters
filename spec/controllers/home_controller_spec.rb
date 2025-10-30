@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 describe HomeController do
@@ -81,7 +79,7 @@ describe HomeController do
         expect(@controller.view_assigns["stories"]).not_to include(story)
       end
 
-      it "lists stories the user has hiddden" do
+      it "lists stories the user has hidden" do
         stub_login_as user
         HiddenStory.hide_story_for_user(story, user)
         get :hidden
@@ -183,7 +181,7 @@ describe HomeController do
       stub_login_as user
       get :multi_tag, params: {tag: [tag1, tag2].map(&:tag).join(",")}
 
-      title = [tag1, tag2].map { [it.tag, it.description].join(" - ") }.join(" ")
+      title = [tag1, tag2].map { |t| [t.tag, t.description].join(" - ") }.join(" ")
 
       expect(response).to be_successful
       expect(@controller.view_assigns["title"]).to eq(title)
@@ -197,7 +195,6 @@ describe HomeController do
   describe "#top" do
     let!(:old_story) { create(:story, created_at: 10.days.ago, updated_at: 10.days.ago) }
     let(:recent_stories) do
-      # Create descending by score so they are sorted in this order from controller
       num = StoriesPaginator::STORIES_PER_PAGE + 5
       Array.new(num) { |n| create :story, score: (num - n) }
     end
