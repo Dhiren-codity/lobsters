@@ -3,21 +3,18 @@ require "rails_helper"
 RSpec.describe NotifyCommentJob, type: :job do
   describe "comment notifications" do
     it "sends reply notification" do
-      recipient = build(:user)
+      recipient = FactoryBot.build(:user)
       recipient.settings["email_notifications"] = true
       recipient.settings["email_replies"] = true
       recipient.save!
 
-      sender = create(:user)
-      # Story under which the comments are posted.
-      story = create(:story)
+      sender = FactoryBot.create(:user)
+      story = FactoryBot.create(:story)
 
-      # Parent comment.
-      c = build(:comment, story: story, user: recipient)
-      c.save! # Comment needs to get an ID so it can have a child (c2).
+      c = FactoryBot.build(:comment, story: story, user: recipient)
+      c.save!
 
-      # Reply comment.
-      c2 = build(:comment, story: story, user: sender, parent_comment: c)
+      c2 = FactoryBot.build(:comment, story: story, user: sender, parent_comment: c)
       c2.save!
 
       NotifyCommentJob.perform_now(c2)
@@ -29,31 +26,31 @@ RSpec.describe NotifyCommentJob, type: :job do
     end
 
     it "doesn't email if the replied-to user is hiding the story" do
-      story = create(:story)
+      story = FactoryBot.create(:story)
 
-      recipient = build(:user)
+      recipient = FactoryBot.build(:user)
       recipient.settings["email_notifications"] = true
       recipient.settings["email_replies"] = true
       recipient.save!
-      parent_comment = create(:comment, story:, user: recipient)
+      parent_comment = FactoryBot.create(:comment, story: story, user: recipient)
 
       HiddenStory.hide_story_for_user(story, recipient)
-      reply = create(:comment, story:, parent_comment:)
+      reply = FactoryBot.create(:comment, story: story, parent_comment: parent_comment)
 
       NotifyCommentJob.perform_now(reply)
 
-      expect(recipient.notifications.count).to eq(1) # exists but is filtered out
+      expect(recipient.notifications.count).to eq(1)
       expect(sent_emails.size).to eq(0)
     end
 
     it "sends mention notification" do
-      recipient = build(:user)
+      recipient = FactoryBot.build(:user)
       recipient.settings["email_notifications"] = true
       recipient.settings["email_mentions"] = true
       recipient.save!
 
-      sender = create(:user)
-      c = create(:comment, user: sender, comment: "@#{recipient.username}")
+      sender = FactoryBot.create(:user)
+      c = FactoryBot.create(:comment, user: sender, comment: "@#{recipient.username}")
 
       NotifyCommentJob.perform_now(c)
 
@@ -64,12 +61,12 @@ RSpec.describe NotifyCommentJob, type: :job do
     end
 
     it "also sends mentions with ~username" do
-      recipient = build(:user)
+      recipient = FactoryBot.build(:user)
       recipient.settings["email_notifications"] = true
       recipient.settings["email_mentions"] = true
       recipient.save!
 
-      c = build(:comment, comment: "~#{recipient.username}")
+      c = FactoryBot.build(:comment, comment: "~#{recipient.username}")
       c.save!
 
       NotifyCommentJob.perform_now(c)
@@ -80,39 +77,34 @@ RSpec.describe NotifyCommentJob, type: :job do
     end
 
     it "doesn't email if the mentioned user is hiding the story" do
-      story = create(:story)
+      story = FactoryBot.create(:story)
 
-      mentioned = build(:user)
+      mentioned = FactoryBot.build(:user)
       mentioned.settings["email_notifications"] = true
       mentioned.settings["email_mentions"] = true
       mentioned.save!
 
       HiddenStory.hide_story_for_user(story, mentioned)
-      reply = create(:comment, story:, comment: "Hello @#{mentioned.username}")
+      reply = FactoryBot.create(:comment, story: story, comment: "Hello @#{mentioned.username}")
 
       NotifyCommentJob.perform_now(reply)
-      expect(mentioned.notifications.count).to eq(1) # exists but is filtered out
+      expect(mentioned.notifications.count).to eq(1)
       expect(sent_emails.size).to eq(0)
     end
 
     it "sends only reply notification on reply with mention" do
-      # User being mentioned and replied to.
-      recipient = build(:user)
+      recipient = FactoryBot.build(:user)
       recipient.settings["email_notifications"] = true
       recipient.settings["email_mentions"] = true
       recipient.settings["email_replies"] = true
-      # Need to save, because deliver_mention_notifications re-fetches from DB.
       recipient.save!
 
-      sender = create(:user)
-      # The story under which the comments are posted.
-      story = create(:story)
-      # The parent comment.
-      c = build(:comment, user: recipient, story: story)
-      c.save! # Comment needs to get an ID so it can have a child (c2).
+      sender = FactoryBot.create(:user)
+      story = FactoryBot.create(:story)
+      c = FactoryBot.build(:comment, user: recipient, story: story)
+      c.save!
 
-      # The child comment.
-      c2 = build(:comment, user: sender, story: story, parent_comment: c,
+      c2 = FactoryBot.build(:comment, user: sender, story: story, parent_comment: c,
         comment: "@#{recipient.username}")
       c2.save!
 
