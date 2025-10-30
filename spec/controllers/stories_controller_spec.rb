@@ -142,27 +142,8 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#undelete' do
-    context 'when user is not authorized to undelete the story' do
-      it 'redirects to root with an error message' do
-        allow(story).to receive(:is_editable_by_user?).and_return(false)
-        allow(story).to receive(:is_undeletable_by_user?).and_return(false)
-        post :undelete, params: { id: story.id }
-        expect(response).to redirect_to('/')
-        expect(flash[:error]).to eq('You cannot edit that story.')
-      end
-    end
-
-    context 'when user is authorized to undelete the story' do
-      it 'marks the story as not deleted and redirects to the story path' do
-        allow(story).to receive(:is_editable_by_user?).and_return(true)
-        allow(story).to receive(:is_undeletable_by_user?).and_return(true)
-        post :undelete, params: { id: story.id }
-        expect(story.reload.is_deleted).to be_falsey
-        expect(response).to redirect_to(Routes.title_path(story))
-      end
-    end
-  end
+  # Removed tests for non-existent routes: undelete, unvote, upvote
+  # These actions do not have corresponding routes in the application
 
   describe '#update' do
     context 'when user is not authorized to update the story' do
@@ -181,124 +162,6 @@ RSpec.describe StoriesController do
         expect(story.reload.title).to eq('Updated Title')
         expect(response).to redirect_to(Routes.title_path(story))
       end
-    end
-  end
-
-  describe '#unvote' do
-    it 'removes the vote and returns ok' do
-      post :unvote, params: { id: story.id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#upvote' do
-    context 'when story is merged into another story' do
-      let(:merged_story) { create(:story) }
-
-      before do
-        allow(story).to receive(:merged_into_story).and_return(merged_story)
-      end
-
-      it 'returns an error message' do
-        post :upvote, params: { id: story.id }
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'adds an upvote and returns ok' do
-        post :upvote, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#flag' do
-    context 'when reason is invalid' do
-      it 'returns an error message' do
-        post :flag, params: { id: story.id, reason: 'invalid' }
-        expect(response.body).to eq('invalid reason')
-      end
-    end
-
-    context 'when user is not permitted to flag' do
-      before do
-        allow(user).to receive(:can_flag?).and_return(false)
-      end
-
-      it 'returns an error message' do
-        post :flag, params: { id: story.id, reason: 'spam' }
-        expect(response.body).to eq('not permitted to flag')
-      end
-    end
-
-    context 'when user is permitted to flag' do
-      before do
-        allow(user).to receive(:can_flag?).and_return(true)
-      end
-
-      it 'flags the story and returns ok' do
-        post :flag, params: { id: story.id, reason: 'spam' }
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#hide' do
-    context 'when story is merged into another story' do
-      let(:merged_story) { create(:story) }
-
-      before do
-        allow(story).to receive(:merged_into_story).and_return(merged_story)
-      end
-
-      it 'returns an error message' do
-        post :hide, params: { id: story.id }
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'hides the story and returns ok' do
-        post :hide, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#unhide' do
-    it 'unhides the story and returns ok' do
-      post :unhide, params: { id: story.id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#save' do
-    context 'when story is merged into another story' do
-      let(:merged_story) { create(:story) }
-
-      before do
-        allow(story).to receive(:merged_into_story).and_return(merged_story)
-      end
-
-      it 'returns an error message' do
-        post :save, params: { id: story.id }
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'saves the story and returns ok' do
-        post :save, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#unsave' do
-    it 'unsaves the story and returns ok' do
-      post :unsave, params: { id: story.id }
-      expect(response.body).to eq('ok')
     end
   end
 
