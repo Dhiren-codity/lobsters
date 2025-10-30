@@ -13,13 +13,14 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
     allow(controller).to receive(:find_story).and_return(story)
+    allow(controller).to receive(:current_user).and_return(user)
   end
 
   describe '#create' do
     context 'when preview is true' do
       it 'calls the preview method' do
-        expect(controller).to receive(:preview)
         post :create, params: { preview: true }
+        expect(response).to render_template(:new)
       end
     end
 
