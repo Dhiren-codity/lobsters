@@ -1,10 +1,4 @@
-# typed: false
-
 require "rails_helper"
-
-# Story#merged_comments (and Comment.confidence_order) depend on a lot of fiddly SQL.
-# If any of these tests fail, START HERE because these are fundamental assumptions for those
-# queries. Hopefully this doesn't even happen if you are migrating to a different db.
 
 def one_result sql
   ActiveRecord::Base.connection.exec_query("SELECT #{sql};").first.first.last
@@ -48,7 +42,6 @@ describe "sql assumptions" do
 
   describe "lpad" do
     it "pads null to null" do
-      # this is two ways of saying 'pad with nulls'; included to avoid padding with '0' instead of '\0'
       expect(one_result("lpad(null, 2, char(0 using binary))")).to eq(nil)
       expect(one_result("lpad(null, 2, '\0')")).to eq(nil)
     end
@@ -96,18 +89,12 @@ describe "sql assumptions" do
     end
 
     it "truncates on multibyte overflow" do
-      # current number of comments
       expect(one_result("435431 & 0xff")).to eq(231)
-
-      # number of bits currently needed for comment IDs
       expect(one_result("#{2**(5 * 8) - 1} & 0xff")).to eq(255)
-
-      # more than the number of bits currently needed for comment IDs
       expect(one_result("#{2**(5 * 9) - 1} & 0xff")).to eq(255)
     end
   end
 
-  # the inner numbers here are extreme but possible highest and lowest possible 'confidence' values
   describe "confidence_order" do
     it "is low for a high-voted comment" do
       expect(one_result("
@@ -136,7 +123,6 @@ describe "sql assumptions" do
 
   describe "cast() confidence_order to char for base case of recursive CTE" do
     it "is left-aligned because sql sorts the char column lexiographically" do
-      # in the CTE this is char(93) but 6 is more than enough to verify assumption
       expect(one_result("cast(char(0x010203 using binary) as char(6) character set binary)")).to \
         be_bytes("\01\02\03\00\00\00")
     end
@@ -151,11 +137,11 @@ describe "sql assumptions" do
 
     it "increments correctly" do
       c = create(:comment, id: 4, score: 1, flags: 0)
-      expect(c.confidence_order.bytes).to eq([0, 0, 0]) # placeholder on creation
+      expect(c.confidence_order.bytes).to eq([0, 0, 0])
       create(:vote, story: c.story, comment: c)
       c.update_score_and_recalculate!(1, 0)
       c.reload
-      expect(c.confidence_order.bytes.last).to eq(c.id) # id included after vote
+      expect(c.confidence_order.bytes.last).to eq(c.id)
     end
   end
 end
