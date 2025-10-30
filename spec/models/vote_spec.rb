@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 describe Vote do
@@ -13,8 +11,6 @@ describe Vote do
   end
 
   context "upvoting a story and flags" do
-    # don't need to test short-circuit where vote is "changed" to what it already is
-
     let(:u) { create(:user) }
     let(:s) { create(:story) }
 
@@ -144,17 +140,15 @@ describe Vote do
     Vote.vote_thusly_on_story_or_comment_for_user_because(1, s.id, c.id, u.id, nil)
     c.reload
     expect(c.user.karma).to eq(1)
-    # initial poster upvote plus new user's vote
     expect(c.score).to eq(2)
     expect(c.flags).to eq(0)
 
-    # flip vote
     Vote.vote_thusly_on_story_or_comment_for_user_because(
       -1, s.id, c.id, u.id, Vote::COMMENT_REASONS.keys.first
     )
     c.reload
 
-    expect(c.user.karma).to eq(0) # doesn't change bc flags don't affect score
+    expect(c.user.karma).to eq(0)
     expect(c.score).to eq(0)
     expect(c.flags).to eq(1)
   end
