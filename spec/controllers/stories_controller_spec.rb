@@ -9,6 +9,7 @@ RSpec.describe StoriesController do
   let(:moderator) { create(:user, :moderator) }
 
   before do
+    controller.instance_variable_set(:@user, user)
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
@@ -94,7 +95,7 @@ RSpec.describe StoriesController do
   describe '#fetch_url_attributes' do
     it 'returns fetched attributes as JSON' do
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 
