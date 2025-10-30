@@ -1,9 +1,4 @@
-# typed: false
-
 require "rails_helper"
-
-# uses page.driver.post because we're not running a full js engine,
-# so the call can't just be click_on('delete'), etc.
 
 RSpec.feature "user threads page ~:user/threads" do
   let(:user) { create(:user) }
@@ -32,7 +27,7 @@ RSpec.feature "user threads page ~:user/threads" do
     story.save!
 
     # check that story was really deleted because the above code is brittle
-    visit Routes.title_path story
+    visit "/stories/#{story.id}"
     expect(page).to have_content("was removed")
 
     visit "/threads/#{user.username}"
