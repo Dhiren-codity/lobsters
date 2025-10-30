@@ -3,7 +3,7 @@ on:
   push:
     branches: [master, main]
   pull_request:
-    branches: []
+    branches: [opened, synchronize, reopened]
 
 jobs:
   test:
