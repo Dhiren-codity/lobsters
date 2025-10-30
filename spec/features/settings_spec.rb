@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 RSpec.feature "Settings" do
@@ -9,7 +7,6 @@ RSpec.feature "Settings" do
   before(:each) { stub_login_as user }
 
   scenario "deactivating and reactivating" do
-    # true for deactivate; false after
     allow_any_instance_of(User).to receive(:authenticate).with("pass").and_return(true, false)
 
     page.driver.post "/settings/deactivate", user: {
