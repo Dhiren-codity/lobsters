@@ -44,7 +44,7 @@ RSpec.describe SettingsController do
     context 'when current password is incorrect' do
       it 'renders index with an error message' do
         allow(user).to receive(:authenticate).and_return(false)
-        patch :update, params: { user: { password: "new_password", current_password: "wrong_password" } }
+        patch :update, params: { user: { password: "new_password" }, current_password: "wrong_password" }
         expect(flash[:error]).to eq("Your current password was not entered correctly.")
         expect(response).to render_template(:index)
       end
@@ -54,7 +54,7 @@ RSpec.describe SettingsController do
       it 'updates the user and renders index with a success message' do
         allow(user).to receive(:authenticate).and_return(true)
         allow(user).to receive(:update).and_return(true)
-        patch :update, params: { user: { password: "new_password", current_password: "password" } }
+        patch :update, params: { user: { password: "new_password" }, current_password: "password" }
         expect(flash.now[:success]).to eq("Successfully updated settings.")
         expect(response).to render_template(:index)
       end
@@ -96,8 +96,7 @@ RSpec.describe SettingsController do
     context 'when Pushover is enabled' do
       it 'redirects to Pushover subscription URL' do
         allow(Pushover).to receive(:enabled?).and_return(true)
-        allow(SecureRandom).to receive(:hex).and_return("random_token")
-        expect(Pushover).to receive(:subscription_url).and_return("http://pushover.com")
+        allow(Pushover).to receive(:subscription_url).and_return("http://pushover.com")
         get :pushover_auth
         expect(response).to redirect_to("http://pushover.com")
       end
@@ -127,8 +126,7 @@ RSpec.describe SettingsController do
 
   describe '#github_auth' do
     it 'redirects to GitHub OAuth URL' do
-      allow(SecureRandom).to receive(:hex).and_return("random_token")
-      expect(Github).to receive(:oauth_auth_url).and_return("http://github.com")
+      allow(Github).to receive(:oauth_auth_url).and_return("http://github.com")
       get :github_auth
       expect(response).to redirect_to("http://github.com")
     end
