@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 RSpec.describe InboxMailbox, type: :mailbox do
@@ -24,6 +22,7 @@ RSpec.describe InboxMailbox, type: :mailbox do
     story.update_cached_columns
     expect(story.comments_count).to eq 1
   end
+
   it "creates a reply to a comment with a valid short id" do
     comment = create(:comment)
     user = create(:user)
