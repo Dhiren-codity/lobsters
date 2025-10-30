@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 RSpec.describe Link, type: :model do
@@ -101,7 +99,6 @@ RSpec.describe Link, type: :model do
     end
   end
 
-  # very similar code, so I'm not retesting all the behavior covered by recreate_from_comment!
   describe "recreate_from_story!" do
     it "links from story url" do
       s = create(:story, url: "https://s.dev")
