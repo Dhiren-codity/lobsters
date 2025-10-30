@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 describe ApplicationHelper do
@@ -74,11 +72,11 @@ describe ApplicationHelper do
 
   describe "#page_count" do
     it "returns the right number of pages" do
-      expect(page_count(49, 50)).to eq(1)
-      expect(page_count(50, 50)).to eq(1)
-      expect(page_count(51, 50)).to eq(2)
-      expect(page_count(99, 50)).to eq(2)
-      expect(page_count(100, 50)).to eq(2)
+      expect(helper.page_count(49, 50)).to eq(1)
+      expect(helper.page_count(50, 50)).to eq(1)
+      expect(helper.page_count(51, 50)).to eq(2)
+      expect(helper.page_count(99, 50)).to eq(2)
+      expect(helper.page_count(100, 50)).to eq(2)
     end
   end
 end
