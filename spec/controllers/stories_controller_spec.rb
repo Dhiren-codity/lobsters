@@ -18,8 +18,8 @@ RSpec.describe StoriesController do
   describe '#create' do
     context 'when preview is true' do
       it 'calls the preview method' do
+        expect(controller).to receive(:preview)
         post :create, params: { preview: true }
-        expect(response).to render_template(:new)
       end
     end
 
