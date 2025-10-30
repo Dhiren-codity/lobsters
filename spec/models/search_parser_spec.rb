@@ -1,20 +1,6 @@
-# typed: false
-
 require "rails_helper"
-require "parslet/convenience" # sp.parse_with_debug("input") for tree
+require "parslet/convenience"
 require "parslet/rig/rspec"
-
-# https://mariadb.com/kb/en/full-text-index-overview/#in-boolean-mode
-
-# support:
-#   terms
-#   quoted terms
-#   tag:
-#   domain:
-#   user:
-#   OR
-#   stemming?
-#   negate any of the above
 
 RSpec::Matchers.define :parse_to do |expected|
   def nested_map obj, &blk
@@ -64,16 +50,13 @@ describe SearchParser do
     it("doesn't parse multiple words") { expect(sp.term).to_not parse("research multiple") }
     it("parses terms with numbers") { expect(sp.term).to parse("plan9") }
     it("parses terms with undescores") { expect(sp.term).to parse("foo_bar") }
-    # Search#flatten_title relies on this:
     it("doesn't parse a quote") { expect(sp.term).to_not parse("a\"quote") }
-    # see shortword test below
     it("parses 4-character words") { expect(sp.term).to parse("hard") }
     it("parses 3-character words") { expect(sp.term).to parse("lua") }
     it("doesn't parse 2-character words") { expect(sp.term).to_not parse("of") }
     it("doesn't parse 1-character words") { expect(sp.term).to_not parse("i") }
   end
 
-  # can't search for short terms https://github.com/lobsters/lobsters/issues/1237
   describe "shortword rule" do
     it("doesn't parse 4-character words") { expect(sp.shortword).to_not parse("blob") }
     it("doesn't parse 3-character words") { expect(sp.shortword).to_not parse("lua") }
@@ -159,7 +142,6 @@ describe SearchParser do
     it("parses complex searches") { expect(sp).to parse('foo -("multi word" cat) tag:pdf') }
   end
 
-  # debugging? remember .parse_with_debug
   describe "parse trees" do
     it "parses multiple terms" do
       expect("research").to parse_to [{term: "research"}]
@@ -199,7 +181,7 @@ describe SearchParser do
 
   describe "bugs I've seen in prod" do
     it "parses an exploit engine search" do
-      assert SearchParser.new.parse 'foo:"bar of" quux' # minimal repro, then full
+      assert SearchParser.new.parse 'foo:"bar of" quux'
       assert SearchParser.new.parse '(intitle:"index of" "credentials") AND -intitle:dork AND -intitle:dorks AND -intitle:Dork'
     end
 
