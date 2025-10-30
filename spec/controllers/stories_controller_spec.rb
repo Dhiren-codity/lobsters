@@ -1,5 +1,8 @@
 require 'rails_helper'
 
+# Add gem requirements as comments for manual Gemfile updates
+# gem 'rails-controller-testing'
+
 RSpec.describe StoriesController do
   let(:user) { create(:user) }
   let(:story) { create(:story, user: user) }
