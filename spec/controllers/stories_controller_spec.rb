@@ -207,6 +207,8 @@ RSpec.describe StoriesController do
   describe '#flag' do
     context 'when reason is invalid' do
       it 'returns an error' do
+        allow(Vote::STORY_REASONS).to receive(:[]).with('invalid').and_return(nil)
+
         post :flag, params: { id: story.id, reason: 'invalid' }
         expect(response.body).to eq('invalid reason')
       end
