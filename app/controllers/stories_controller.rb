@@ -1,443 +1,108 @@
-# typed: false
+require 'rails_helper'
+require 'spec_helper'
+# Add gem 'rails-controller-testing' to your Gemfile
 
-class StoriesController < ApplicationController
-  include StoryFinder
-
-  content_security_policy(only: :show) do |policy|
-    policy.img_src :self, :data, -> { @story&.can_have_images? ? "https:" : "" }
+RSpec.describe StoriesController, type: :controller do
+  before do
+    # Assuming FactoryBot is configured correctly
+    @user = FactoryBot.create(:user)
+    sign_in @user
   end
 
-  caches_page :show, if: CACHE_PAGE
-
-  before_action :require_logged_in_user_or_400,
-    only: [:upvote, :flag, :unvote, :hide, :unhide, :preview, :save, :unsave]
-  before_action :require_logged_in_user,
-    only: [:destroy, :create, :edit, :fetch_url_attributes, :new]
-  before_action :verify_user_can_submit_stories, only: [:new, :create]
-  before_action :find_user_story, only: [:destroy, :edit, :undelete, :update]
-  around_action :track_story_reads, only: [:show], if: -> { @user.present? }
-  before_action :show_title_h1, only: [:new, :edit]
-
-  def create
-    return preview if params[:preview]
-
-    @title = "Submit Story"
-
-    @story = Story.new(user: @user)
-    update_story_attributes
-    update_resubmit_comment_attributes
-
-    if @story.valid? &&
-        !@story.already_posted_recently? &&
-        (!@story.is_resubmit? || @comment.valid?)
-
-      Story.transaction do
-        if @story.save && (!@story.is_resubmit? || @comment.save)
-          ReadRibbon.where(user: @user, story: @story).first_or_create!
-          redirect_to Routes.title_path @story
-        else
-          raise ActiveRecord::Rollback
-        end
-      end
-      return if @story.persisted? # can't return out of transaction block
+  describe "GET #new" do
+    it "returns http success" do
+      get :new
+      expect(response).to have_http_status(:success)
     end
-
-    render action: "new"
   end
 
-  def destroy
-    if !@story.is_editable_by_user?(@user) && !@user.is_moderator?
-      flash[:error] = "You cannot edit that story."
-      return redirect_to "/"
-    end
-
-    update_story_attributes
-    @story.is_deleted = true
-    @story.editor = @user
-
-    if @story.save
-      Keystore.increment_value_for("user:#{@story.user.id}:stories_deleted")
-      Mastodon.delete_post(@story)
-    end
-
-    redirect_to Routes.title_path @story
-  end
-
-  def edit
-    if !@story.is_editable_by_user?(@user)
-      flash[:error] = "You cannot edit that story."
-      return redirect_to "/"
-    end
-
-    @title = "Edit Story"
-  end
-
-  def fetch_url_attributes
-    s = Story.new
-    s.fetching_ip = request.remote_ip
-    s.url = params[:fetch_url]
-
-    render json: s.fetched_attributes
-  end
-
-  def new
-    @title = "Submit Story"
-
-    @story = Story.new(user_id: @user.id)
-    @story.fetching_ip = request.remote_ip
-
-    if params[:url].present?
-      @story.url = params[:url]
-      sattrs = @story.fetched_attributes
-
-      if sattrs[:url].present? && @story.url != sattrs[:url]
-        flash.now[:notice] = "Note: URL has been changed to fetched " \
-          "canonicalized version"
-        @story.url = sattrs[:url]
+  describe "POST #create" do
+    context "with valid attributes" do
+      it "creates a new story" do
+        expect {
+          post :create, params: { story: FactoryBot.attributes_for(:story) }
+        }.to change(Story, :count).by(1)
       end
 
-      if @story.already_posted_recently?
-        # user won't be able to submit this story as new, so just redirect
-        # them to the previous story
-        flash[:success] = "This URL has already been submitted recently."
-        return redirect_to Routes.title_path @story.most_recent_similar
+      it "redirects to the new story" do
+        post :create, params: { story: FactoryBot.attributes_for(:story) }
+        expect(response).to redirect_to Routes.title_path(Story.last)
+      end
+    end
+
+    context "with invalid attributes" do
+      it "does not save the new story" do
+        expect {
+          post :create, params: { story: FactoryBot.attributes_for(:invalid_story) }
+        }.to_not change(Story, :count)
       end
 
-      update_resubmit_comment_attributes
-
-      # ignore what the user brought unless we need it as a fallback
-      @story.title = sattrs[:title]
-      if @story.title.blank? && params[:title].present?
-        @story.title = params[:title]
+      it "re-renders the new method" do
+        post :create, params: { story: FactoryBot.attributes_for(:invalid_story) }
+        expect(response).to render_template :new
       end
     end
   end
 
-  def preview
-    @story = Story.new
-    update_story_attributes
-    update_resubmit_comment_attributes
-    @story.user_id = @user.id
-    @story.previewing = true
-
-    @story.current_vote = Vote.new(vote: 1)
-    @story.score = 1
-
-    @story.valid?
-    @merged_stories = [@story]
-
-    render action: "new", layout: !request.xhr?
+  describe "GET #edit" do
+    it "returns http success" do
+      story = FactoryBot.create(:story, user: @user)
+      get :edit, params: { id: story.id }
+      expect(response).to have_http_status(:success)
+    end
   end
 
-  def show
-    # @story was already loaded by track_story_reads for logged-in users
-    @story ||= Story.where(short_id: params[:id]).first!
-    if @story.merged_into_story
-      respond_to do |format|
-        format.html {
-          flash[:success] = "\"#{@story.title}\" has been merged into this story."
-          return redirect_to Routes.title_path @story.merged_into_story, anchor: @story.header_anchor
-        }
-        format.json {
-          return redirect_to(story_path(@story.merged_into_story, format: :json))
-        }
+  describe "PATCH #update" do
+    before :each do
+      @story = FactoryBot.create(:story, title: "Old Title", user: @user)
+    end
+
+    context "valid attributes" do
+      it "located the requested @story" do
+        patch :update, params: { id: @story.id, story: FactoryBot.attributes_for(:story) }
+        expect(assigns(:story)).to eq(@story)
+      end
+
+      it "changes @story's attributes" do
+        patch :update, params: { id: @story.id, story: { title: "New Title" } }
+        @story.reload
+        expect(@story.title).to eq("New Title")
+      end
+
+      it "redirects to the updated story" do
+        patch :update, params: { id: @story.id, story: FactoryBot.attributes_for(:story) }
+        expect(response).to redirect_to Routes.title_path(@story)
       end
     end
 
-    # if asking with a title and it's been edited, 302
-    if params[:title] && params[:title] != @story.title_as_slug
-      return redirect_to(Routes.title_path(@story))
-    end
-
-    if @story.is_gone?
-      @moderation = Moderation
-        .where(story: @story, comment: nil)
-        .where("action LIKE '%deleted story%'")
-        .order(id: :desc)
-        .first
-    end
-    if !@story.can_be_seen_by_user?(@user)
-      respond_to do |format|
-        format.html { return render action: "_missing", status: 404, locals: {story: @story, moderation: @moderation} }
-        format.json { raise ActiveRecord::RecordNotFound }
+    context "invalid attributes" do
+      it "does not change @story's attributes" do
+        patch :update, params: { id: @story.id, story: { title: nil } }
+        @story.reload
+        expect(@story.title).to eq("Old Title")
       end
-    end
 
-    @comments = Comment.story_threads(@story).for_presentation
-    @read_by_notifications = @user ? Comment.where(story_id: [@story.id] + @story.merged_stories.pluck(:id)).where(id: @user.notifications.read.of_comments) : []
-
-    @title = @story.title
-
-    respond_to do |format|
-      format.html {
-        @meta_tags = [
-          {property: "og:type", content: "article"},
-          {property: "og:site_name", content: "Lobsters"},
-          {property: "og:title", content: @story.title},
-          {property: "og:description", content: @story.comments_count.to_s + " " + "comment".pluralize(@story.comments_count)},
-          {property: "og:image", content: Rails.application.root_url + "touch-icon-144.png"},
-          {property: "article:author", content: Routes.user_url(@story.user)}
-        ]
-        @meta_tags << {property: "article:author", content: "https://#{@story.user.mastodon_instance}/@#{@story.user.mastodon_username}"} if @story.user.mastodon_username.present?
-
-        load_user_votes
-
-        @merged_stories = [@story, @story.merged_stories.not_deleted(@user).mod_single_preload?(@user).for_presentation.includes(:votes)].flatten
-        render action: "show"
-      }
-      format.json {
-        @comments = @comments.includes(:parent_comment)
-        render json: @story.as_json(with_comments: @comments)
-      }
-    end
-  end
-
-  def undelete
-    if !(@story.is_editable_by_user?(@user) &&
-    @story.is_undeletable_by_user?(@user))
-      flash[:error] = "You cannot edit that story."
-      return redirect_to "/"
-    end
-
-    update_story_attributes
-    @story.is_deleted = false
-    @story.editor = @user
-
-    if @story.save
-      Keystore.increment_value_for("user:#{@story.user.id}:stories_deleted", -1)
-    end
-
-    redirect_to Routes.title_path @story
-  end
-
-  def update
-    if !@story.is_editable_by_user?(@user)
-      flash[:error] = "You cannot edit that story."
-      return redirect_to "/"
-    end
-
-    @story.last_edited_at = Time.current
-    @story.is_deleted = false
-    @story.editor = @user
-    update_story_attributes
-
-    if @story.save
-      redirect_to Routes.title_path @story
-    else
-      render action: "edit"
-    end
-  end
-
-  def unvote
-    if !(story = find_story) || story.is_gone?
-      return render plain: "can't find story", status: 400
-    end
-
-    Vote.vote_thusly_on_story_or_comment_for_user_because(
-      0, story.id, nil, @user.id, nil
-    )
-
-    render plain: "ok"
-  end
-
-  def upvote
-    if !(story = find_story) || story.is_gone?
-      return render plain: "can't find story", status: 400
-    end
-
-    if story.merged_into_story
-      return render plain: "story has been merged", status: 400
-    end
-
-    Vote.vote_thusly_on_story_or_comment_for_user_because(
-      1, story.id, nil, @user.id, nil
-    )
-
-    render plain: "ok"
-  end
-
-  def flag
-    if !(story = find_story) || story.is_gone?
-      return render plain: "can't find story", status: 400
-    end
-
-    if !Vote::STORY_REASONS[params[:reason]]
-      return render plain: "invalid reason", status: 400
-    end
-
-    if !@user.can_flag?(story)
-      return render plain: "not permitted to flag", status: 400
-    end
-
-    Vote.vote_thusly_on_story_or_comment_for_user_because(
-      -1, story.id, nil, @user.id, params[:reason]
-    )
-
-    render plain: "ok"
-  end
-
-  def hide
-    if !(story = find_story)
-      return render plain: "can't find story", status: 400
-    end
-
-    if story.merged_into_story
-      return render plain: "story has been merged", status: 400
-    end
-
-    HiddenStory.hide_story_for_user(story, @user)
-
-    if request.xhr?
-      render plain: "ok"
-    else
-      redirect_to story_path(story)
-    end
-  end
-
-  def unhide
-    if !(story = find_story)
-      return render plain: "can't find story", status: 400
-    end
-
-    HiddenStory.unhide_story_for_user(story, @user)
-
-    if request.xhr?
-      render plain: "ok"
-    else
-      redirect_to story_path(story)
-    end
-  end
-
-  def save
-    if !(story = find_story)
-      return render plain: "can't find story", status: 400
-    end
-
-    if story.merged_into_story
-      return render plain: "story has been merged", status: 400
-    end
-
-    SavedStory.save_story_for_user(story.id, @user.id)
-
-    render plain: "ok"
-  end
-
-  def unsave
-    if !(story = find_story)
-      return render plain: "can't find story", status: 400
-    end
-
-    SavedStory.where(user_id: @user.id, story_id: story.id).delete_all
-
-    render plain: "ok"
-  end
-
-  def check_url_dupe
-    raise ActionController::ParameterMissing.new("No URL") if params.dig(:story, :url).blank?
-    @story = Story.new(user: @user)
-    update_story_attributes
-    update_resubmit_comment_attributes
-    @story.check_already_posted_recently?
-
-    respond_to do |format|
-      linking_comments = Link.recently_linked_from_comments(@story.url)
-      format.html {
-        return render partial: "stories/form_errors", layout: false,
-          content_type: "text/html", locals: {
-            linking_comments: linking_comments,
-            story: @story
-          }
-      }
-      # json: https://github.com/lobsters/lobsters/pull/555
-      format.json {
-        similar_stories = @story.public_similar_stories(@user).map(&:as_json)
-        render json: @story.as_json.merge(similar_stories: similar_stories)
-      }
-    end
-  end
-
-  def disown
-    if !((story = find_story) && story.disownable_by_user?(@user))
-      return render plain: "can't find story", status: 400
-    end
-
-    InactiveUser.disown! story
-
-    redirect_to Routes.title_path story
-  end
-
-  private
-
-  def story_params
-    ps = params.require(:story).permit(:title, :url, :description, :user_is_author, :user_is_following, tags: [])
-    ps[:tags] = Tag.where(tag: ps[:tags] || @story.tags.map(&:tag), active: true)
-    ps
-  end
-
-  def update_story_attributes
-    @story.tags_was = @story.tags.to_a
-    @story.attributes = if @story.url_is_editable_by_user?(@user)
-      story_params
-    else
-      story_params.except(:url)
-    end
-  end
-
-  def update_resubmit_comment_attributes
-    if @story.is_resubmit?
-      @comment = @story.comments.new(user: @user)
-      @comment.comment = params[:comment]
-      @comment.hat = @user.wearable_hats.find_by(short_id: params[:hat_id])
-    end
-  end
-
-  def find_user_story
-    @story = if @user.is_moderator?
-      Story.where(short_id: params[:story_id] || params[:id]).first
-    else
-      Story.where(user_id: @user.id, short_id: params[:story_id] || params[:id]).first
-    end
-
-    if !@story
-      flash[:error] = "Could not find story or you are not authorized " \
-        "to manage it."
-      redirect_to "/"
-      false
-    end
-  end
-
-  def load_user_votes
-    if @user
-      @story.current_vote = Vote.find_by(user: @user, story: @story, comment: nil)
-
-      @story.is_hidden_by_cur_user = @story.is_hidden_by_user?(@user)
-      @story.is_saved_by_cur_user = @story.is_saved_by_user?(@user)
-
-      @votes = Vote.comment_votes_by_user_for_story_hash(
-        @user.id, @story.merged_stories.ids.push(@story.id)
-      )
-      comment_ids = @comments.map(&:id)
-      vote_summaries = Vote.comment_vote_summaries(comment_ids)
-      current_user_reply_parents = @user&.ids_replied_to(comment_ids) || Hash.new { false }
-      @comments.each do |c|
-        c.current_vote = @votes[c.id]
-        c.vote_summary = vote_summaries[c.id]
-        c.current_reply = current_user_reply_parents.has_key? c.id
+      it "re-renders the edit method" do
+        patch :update, params: { id: @story.id, story: { title: nil } }
+        expect(response).to render_template :edit
       end
     end
   end
 
-  def verify_user_can_submit_stories
-    if !@user.can_submit_stories?
-      flash[:error] = "You are not allowed to submit new stories."
-      redirect_to "/"
+  describe "DELETE #destroy" do
+    before :each do
+      @story = FactoryBot.create(:story, user: @user)
     end
-  end
 
-  def track_story_reads
-    @story = Story.where(short_id: params[:id]).mod_single_preload?(@user).first!
-    @ribbon = ReadRibbon.where(user: @user, story: @story).first_or_initialize
-    yield
-    @ribbon.bump
+    it "deletes the story" do
+      expect {
+        delete :destroy, params: { id: @story.id }
+      }.to change(Story, :count).by(-1)
+    end
+
+    it "redirects to stories#index" do
+      delete :destroy, params: { id: @story.id }
+      expect(response).to redirect_to "/"
+    end
   end
 end
