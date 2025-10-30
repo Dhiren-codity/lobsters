@@ -1,12 +1,11 @@
-# typed: false
-
 require "rails_helper"
 
 describe Tag do
   context "validations" do
     it "allows a valid tag to be created" do
+      category = Category.first || create(:category)
       tag = Tag.create!(
-        category: Category.first,
+        category: category,
         tag: "tag_name",
         hotness_mod: 0.25,
         description: "test description"
@@ -47,7 +46,8 @@ describe Tag do
     let(:edit_user) { create :user }
 
     it "logs on create" do
-      expect { Tag.create(category: Category.first, tag: "tag_name", edit_user_id: edit_user.id) }
+      category = Category.first || create(:category)
+      expect { Tag.create(category: category, tag: "tag_name", edit_user_id: edit_user.id) }
         .to change { Moderation.count }.by(1)
       mod = Moderation.last
       expect(mod.action).to include "tag_name"
@@ -56,7 +56,8 @@ describe Tag do
     end
 
     it "logs on update" do
-      expect { Tag.first.update(tag: "new_tag_name", edit_user_id: edit_user.id) }
+      tag = Tag.first || create(:tag, category: create(:category))
+      expect { tag.update(tag: "new_tag_name", edit_user_id: edit_user.id) }
         .to change { Moderation.count }.by(1)
       mod = Moderation.last
       expect(mod.action).to include "new_tag_name"
