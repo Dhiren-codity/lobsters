@@ -1,6 +1,7 @@
 require 'rails_helper'
+require 'spec_helper'
 
-RSpec.describe StoriesController do
+RSpec.describe StoriesController, type: :controller do
   let(:user) { create(:user) }
   let(:story) { create(:story, user: user) }
   let(:moderator) { create(:user, :moderator) }
