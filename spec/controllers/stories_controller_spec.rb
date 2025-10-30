@@ -13,6 +13,7 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
     allow(controller).to receive(:find_story).and_return(story)
+    allow(controller).to receive(:current_user).and_return(user)
   end
 
   describe '#create' do
@@ -215,7 +216,6 @@ RSpec.describe StoriesController do
     context 'when user cannot flag' do
       it 'returns an error' do
         allow(user).to receive(:can_flag?).and_return(false)
-        allow(controller).to receive(:find_story).and_return(story)
 
         post :flag, params: { id: story.id, reason: 'spam' }
         expect(response.body).to eq('not permitted to flag')
