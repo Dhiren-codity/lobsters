@@ -7,6 +7,7 @@ RSpec.describe StoriesController, type: :controller do
   let(:moderator) { create(:user, :moderator) }
 
   before do
+    sign_in user
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
