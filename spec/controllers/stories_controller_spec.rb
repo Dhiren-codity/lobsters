@@ -207,7 +207,6 @@ RSpec.describe StoriesController do
   describe '#flag' do
     context 'when reason is invalid' do
       it 'returns an error' do
-        allow(controller).to receive(:find_story).and_return(story)
         post :flag, params: { id: story.id, reason: 'invalid' }
         expect(response.body).to eq('invalid reason')
       end
@@ -215,7 +214,6 @@ RSpec.describe StoriesController do
 
     context 'when user cannot flag' do
       it 'returns an error' do
-        allow(controller).to receive(:find_story).and_return(story)
         allow(user).to receive(:can_flag?).and_return(false)
 
         post :flag, params: { id: story.id, reason: 'spam' }
@@ -225,7 +223,6 @@ RSpec.describe StoriesController do
 
     context 'when flagging is successful' do
       it 'returns ok' do
-        allow(controller).to receive(:find_story).and_return(story)
         allow(user).to receive(:can_flag?).and_return(true)
         allow(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).and_return(true)
 
@@ -237,7 +234,6 @@ RSpec.describe StoriesController do
 
   describe '#hide' do
     it 'hides the story and returns ok' do
-      allow(controller).to receive(:find_story).and_return(story)
       allow(HiddenStory).to receive(:hide_story_for_user).and_return(true)
 
       post :hide, params: { id: story.id }
@@ -247,7 +243,6 @@ RSpec.describe StoriesController do
 
   describe '#unhide' do
     it 'unhides the story and returns ok' do
-      allow(controller).to receive(:find_story).and_return(story)
       allow(HiddenStory).to receive(:unhide_story_for_user).and_return(true)
 
       post :unhide, params: { id: story.id }
@@ -257,7 +252,6 @@ RSpec.describe StoriesController do
 
   describe '#save' do
     it 'saves the story and returns ok' do
-      allow(controller).to receive(:find_story).and_return(story)
       allow(SavedStory).to receive(:save_story_for_user).and_return(true)
 
       post :save, params: { id: story.id }
@@ -267,7 +261,6 @@ RSpec.describe StoriesController do
 
   describe '#unsave' do
     it 'unsaves the story and returns ok' do
-      allow(controller).to receive(:find_story).and_return(story)
       allow(SavedStory).to receive(:where).and_return(double(delete_all: true))
 
       post :unsave, params: { id: story.id }
