@@ -1,12 +1,6 @@
-# typed: false
-
 require "rails_helper"
 
 describe Search do
-  # We need to set up and then teardown the environment
-  # outside of the typical RSpec transaction because
-  # the search module uses custom SQL that doesn't
-  # work inside the transaction
   before(:all) do
     @alice = create(:user, username: "alice")
     @bob = create(:user, username: "bob")
@@ -67,8 +61,6 @@ describe Search do
   it "returns nothing when initialized empty" do
     search = Search.new({}, nil)
 
-    # test is a bit brittle by coupling to the way the caching couples to the perform! dispatcher,
-    # but add db-query-matchers gem if test gets flaky
     expect(search).to_not receive(:perform_story_search!)
     expect(search).to_not receive(:perform_comment_search!)
 
@@ -78,7 +70,6 @@ describe Search do
   it "doesn't permit sql injection" do
     %w[' " % \\' \\" \\\\' \\\\"].each do |esc|
       [
-        # stories
         {what: "stories", q: "term#{esc}"},
         {what: "stories", q: "\"term#{esc}\""},
         {what: "stories", q: "domain:foo#{esc}"},
@@ -95,11 +86,9 @@ describe Search do
         {what: "stories", q: "can't"},
         {what: "stories", q: "term 'two apostrophes'"},
         {what: "stories", q: "'go-sqlite'"},
-        # some real attack attempts:
         {what: "stories", q: "tag:formalmethods tag:testing'' ORDER BY 1-- BjzD"},
         {what: "stories", q: "tag:formalmethods tag:testing'fcvzLp<'\">UkDPPc"},
         {what: "stories", q: "tag:formalmethods tag:testing') AND EXTRACTVALUE(4050,CONCAT(0x5c,0x7170787171,(SELECT (ELT(4050=4050,1))),0x71627a6b71)) AND ('pDUW'='pDUW"},
-        # comments
         {what: "comments", q: "term#{esc}"},
         {what: "comments", q: "\"term#{esc}\""},
         {what: "comments", q: "domain:foo#{esc}"},
@@ -117,13 +106,11 @@ describe Search do
         {what: "comments", q: "term", page: "2#{esc}"},
         {what: "comments#{esc}", q: "term"}
       ].each do |params|
-        # implicit assertion that no error was thrown for invalid SQL
         expect(Search.new(params, nil).results.length).to eq(0)
       end
     end
   end
 
-  # + is the boolean mode operator meaning 'required'
   it "doesn't error on odd real searches with punctuation" do
     [
       {q: "c++"},
@@ -160,7 +147,6 @@ describe Search do
     expect(search.results.length).to eq(1)
     expect(search.results.first.title).to eq("term1 domain2")
 
-    # Old, explicit "domain:" syntax
     search = Search.new({q: "term1 domain:lobste.rs", what: "stories"}, @alice)
 
     expect(search.results.length).to eq(1)
@@ -179,8 +165,6 @@ describe Search do
 
     expect(search.results.length).to eq(3)
 
-    # It's easy to search tags in a way that Rails thinks satisfies the preload request for
-    # story.tags, causing stories to only have the searched-for tags
     multi_tag_res = search.results.select { |res| res.id == @multi_tag.id }
     expect(multi_tag_res.length).to eq(1)
     expect(multi_tag_res.first.tags.map(&:tag).sort).to eq(["tag1", "tag2"])
@@ -279,7 +263,6 @@ describe Search do
     expect(search.results).to include(@comments[4])
     expect(search.results).not_to include(@comments[3])
 
-    # Old, explicit "domain:" syntax
     search = Search.new({q: "domain:lobste.rs", what: "comments"}, @alice)
 
     expect(search.results).to include(@comments[4])
@@ -337,7 +320,6 @@ describe Search do
   describe "#strip_short_terms" do
     it "removes short words that mariadb would ignore" do
       s = Search.new({}, nil)
-      # removes both 1 and 2 char terms
       expect(s.strip_short_terms("i")).to eq("")
       expect(s.strip_short_terms("do")).to eq("")
       expect(s.strip_short_terms("can't")).to eq("can't")
