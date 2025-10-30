@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 describe Keystore do
@@ -20,12 +18,12 @@ describe Keystore do
   describe "should raise error when" do
     it "send invalid arguments to service class interfaces #put" do
       expect { Keystore.put(invalid_key, value) }
-        .to raise_error("50 characters is the maximum allowed for key")
+        .to raise_error(ActiveRecord::ValueTooLong, "50 characters is the maximum allowed for key")
     end
 
     it "send invalid arguments to service class interfaces #incremented_value_for" do
       expect { Keystore.incremented_value_for(invalid_key, value) }
-        .to raise_error("50 characters is the maximum allowed for key")
+        .to raise_error(ActiveRecord::ValueTooLong, "50 characters is the maximum allowed for key")
     end
   end
 end
