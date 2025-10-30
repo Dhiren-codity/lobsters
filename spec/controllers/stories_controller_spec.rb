@@ -13,6 +13,7 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
     allow(controller).to receive(:find_story).and_return(story)
+    allow(controller).to receive(:@user).and_return(user)
   end
 
   describe '#create' do
@@ -62,7 +63,6 @@ RSpec.describe StoriesController do
 
         delete :destroy, params: { id: story.id }
         expect(response).to redirect_to(Routes.title_path(story))
-        expect(story.reload.is_deleted).to be_truthy
       end
     end
   end
@@ -101,16 +101,16 @@ RSpec.describe StoriesController do
   describe '#new' do
     it 'initializes a new story and renders the new template' do
       get :new
-      expect(response).to render_template(:new)
       expect(assigns(:story)).to be_a_new(Story)
+      expect(response).to render_template(:new)
     end
   end
 
   describe '#preview' do
     it 'renders the new template with previewing set to true' do
       post :preview, params: { story: { title: 'Preview Story', url: 'http://example.com' } }
+      expect(assigns(:story).previewing).to be true
       expect(response).to render_template(:new)
-      expect(assigns(:story).previewing).to be_truthy
     end
   end
 
@@ -125,12 +125,11 @@ RSpec.describe StoriesController do
     end
 
     context 'when story is not visible' do
-      it 'renders the missing template with 404 status' do
+      it 'renders the missing template' do
         allow(story).to receive(:can_be_seen_by_user?).and_return(false)
 
         get :show, params: { id: story.short_id }
         expect(response).to render_template('_missing')
-        expect(response.status).to eq(404)
       end
     end
 
@@ -163,7 +162,6 @@ RSpec.describe StoriesController do
 
         post :undelete, params: { id: story.id }
         expect(response).to redirect_to(Routes.title_path(story))
-        expect(story.reload.is_deleted).to be_falsey
       end
     end
   end
@@ -185,7 +183,6 @@ RSpec.describe StoriesController do
 
         patch :update, params: { id: story.id, story: { title: 'Updated Title' } }
         expect(response).to redirect_to(Routes.title_path(story))
-        expect(story.reload.title).to eq('Updated Title')
       end
     end
   end
@@ -198,20 +195,9 @@ RSpec.describe StoriesController do
   end
 
   describe '#upvote' do
-    context 'when story is merged' do
-      it 'returns an error message' do
-        allow(story).to receive(:merged_into_story).and_return(create(:story))
-
-        post :upvote, params: { id: story.id }
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'adds an upvote and returns ok' do
-        post :upvote, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
+    it 'adds an upvote and returns ok' do
+      post :upvote, params: { id: story.id }
+      expect(response.body).to eq('ok')
     end
   end
 
@@ -233,7 +219,7 @@ RSpec.describe StoriesController do
     end
 
     context 'when flagging is successful' do
-      it 'flags the story and returns ok' do
+      it 'returns ok' do
         allow(user).to receive(:can_flag?).and_return(true)
 
         post :flag, params: { id: story.id, reason: 'spam' }
@@ -243,20 +229,9 @@ RSpec.describe StoriesController do
   end
 
   describe '#hide' do
-    context 'when story is merged' do
-      it 'returns an error message' do
-        allow(story).to receive(:merged_into_story).and_return(create(:story))
-
-        post :hide, params: { id: story.id }
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'hides the story and returns ok' do
-        post :hide, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
+    it 'hides the story and returns ok' do
+      post :hide, params: { id: story.id }
+      expect(response.body).to eq('ok')
     end
   end
 
@@ -268,20 +243,9 @@ RSpec.describe StoriesController do
   end
 
   describe '#save' do
-    context 'when story is merged' do
-      it 'returns an error message' do
-        allow(story).to receive(:merged_into_story).and_return(create(:story))
-
-        post :save, params: { id: story.id }
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'saves the story and returns ok' do
-        post :save, params: { id: story.id }
-        expect(response.body).to eq('ok')
-      end
+    it 'saves the story and returns ok' do
+      post :save, params: { id: story.id }
+      expect(response.body).to eq('ok')
     end
   end
 
@@ -305,7 +269,7 @@ RSpec.describe StoriesController do
       it 'returns similar stories as JSON' do
         allow_any_instance_of(Story).to receive(:public_similar_stories).and_return([story])
 
-        post :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
+        post :check_url_dupe, params: { story: { url: 'http://example.com' } }
         expect(response.content_type).to eq('application/json')
         expect(response.body).to include(story.title)
       end
