@@ -1,10 +1,9 @@
-# typed: false
-
 require "rails_helper"
+require "factory_bot_rails"
 
 RSpec.feature "Submitting Stories", type: :feature do
-  let(:user) { create(:user) }
-  let!(:inactive_user) { create(:user, :inactive) }
+  let(:user) { FactoryBot.create(:user) }
+  let!(:inactive_user) { FactoryBot.create(:user, :inactive) }
 
   before(:each) { stub_login_as user }
 
@@ -27,14 +26,13 @@ RSpec.feature "Submitting Stories", type: :feature do
     select :tag1, from: "Tags"
     click_button "Preview"
 
-    # preview of a story uses 'just now' instead of "X hours ago" timestamp
     expect(page).to have_content "just now"
   end
 
   scenario "new user previewing an unseen domain" do
-    inactive_user # TODO: remove reference after satisfying rubocop RSpec/LetSetup properly
+    inactive_user
     user.update!(created_at: 1.day.ago)
-    refute(Domain.where(domain: "example.net").exists?)
+    expect(Domain.where(domain: "example.net").exists?).to be_falsey
     expect {
       visit "/stories/new"
       fill_in "URL", with: "https://example.net/story"
@@ -82,7 +80,7 @@ RSpec.feature "Submitting Stories", type: :feature do
   end
 
   scenario "resubmitting a recent link" do
-    s = create(:story, created_at: 1.day.ago)
+    s = FactoryBot.create(:story, created_at: 1.day.ago)
     expect {
       visit "/stories/new"
       fill_in "URL", with: s.url
@@ -95,9 +93,9 @@ RSpec.feature "Submitting Stories", type: :feature do
   end
 
   scenario "new user submitting an unseen domain" do
-    inactive_user # TODO: remove reference after satisfying rubocop RSpec/LetSetup properly
+    inactive_user
     user.update!(created_at: 1.day.ago)
-    refute(Domain.where(domain: "example.net").exists?)
+    expect(Domain.where(domain: "example.net").exists?).to be_falsey
     expect {
       visit "/stories/new"
       fill_in "URL", with: "https://example.net/story"
@@ -112,11 +110,11 @@ RSpec.feature "Submitting Stories", type: :feature do
   scenario "new user submitting a new origin from a multi-author domain" do
     pending "Story submission approval - this would probably have a high false-positive rate"
 
-    inactive_user # TODO: remove reference after satisfying rubocop RSpec/LetSetup properly
-    create(:domain, :github_with_selector)
-    create(:story, url: "https://github.com/alice")
+    inactive_user
+    FactoryBot.create(:domain, :github_with_selector)
+    FactoryBot.create(:story, url: "https://github.com/alice")
     user.update!(created_at: 1.day.ago)
-    refute(Origin.where(identifier: "github.com/bob").exists?)
+    expect(Origin.where(identifier: "github.com/bob").exists?).to be_falsey
     expect {
       visit "/stories/new"
       fill_in "URL", with: "https://github.com/bob/cryptocurrency"
@@ -129,7 +127,7 @@ RSpec.feature "Submitting Stories", type: :feature do
 
   scenario "new user resubmitting a link" do
     user.update!(created_at: 1.day.ago)
-    s = create(:story, created_at: 1.year.ago)
+    s = FactoryBot.create(:story, created_at: 1.year.ago)
     expect {
       visit "/stories/new"
       fill_in "URL", with: s.url
@@ -142,9 +140,9 @@ RSpec.feature "Submitting Stories", type: :feature do
   end
 
   scenario "new user submitting with a tag not permitted for new users" do
-    inactive_user # TODO: remove reference after satisfying rubocop RSpec/LetSetup properly
-    drama = create(:tag, tag: "drama", permit_by_new_users: false)
-    earlier_story = create(:story)
+    inactive_user
+    drama = FactoryBot.create(:tag, tag: "drama", permit_by_new_users: false)
+    earlier_story = FactoryBot.create(:story)
     user.update!(created_at: 1.day.ago)
     expect {
       visit "/stories/new"
@@ -159,7 +157,7 @@ RSpec.feature "Submitting Stories", type: :feature do
   end
 
   scenario "resubmitting a recent link deleted by a moderator" do
-    s = create(:story, is_deleted: true, is_moderated: true, created_at: 1.day.ago)
+    s = FactoryBot.create(:story, is_deleted: true, is_moderated: true, created_at: 1.day.ago)
     expect {
       visit "/stories/new"
       fill_in "URL", with: s.url
@@ -167,14 +165,13 @@ RSpec.feature "Submitting Stories", type: :feature do
       select :tag1, from: "Tags"
       click_button "Submit"
 
-      # TODO: would be nice if this had a specific error message #941
       expect(page).to have_content "has already been submitted"
     }.not_to(change { Story.count })
   end
 
   context "resubmitting an old link" do
     scenario "prompts user to start a conversation" do
-      s = create(:story, created_at: (Story::RECENT_DAYS + 1).days.ago)
+      s = FactoryBot.create(:story, created_at: (Story::RECENT_DAYS + 1).days.ago)
       visit "/stories/new?url=#{s.url}"
 
       expect(page).to have_content "submitted before"
@@ -182,7 +179,7 @@ RSpec.feature "Submitting Stories", type: :feature do
     end
 
     scenario "without a comment doesn't work" do
-      s = create(:story, created_at: (Story::RECENT_DAYS + 1).days.ago)
+      s = FactoryBot.create(:story, created_at: (Story::RECENT_DAYS + 1).days.ago)
       visit "/stories/new?url=#{s.url}"
       click_button "Submit"
 
@@ -191,7 +188,7 @@ RSpec.feature "Submitting Stories", type: :feature do
     end
 
     scenario "with a conversation starter works" do
-      s = create(:story, created_at: (Story::RECENT_DAYS + 1).days.ago)
+      s = FactoryBot.create(:story, created_at: (Story::RECENT_DAYS + 1).days.ago)
       visit "/stories/new?url=#{s.url}"
       fill_in "comment", with: <<~COMMENT
         Well, everyone knows Custer died at Little Bighorn.
@@ -219,7 +216,7 @@ RSpec.feature "Submitting Stories", type: :feature do
   end
 
   scenario "attributing lobsters traffic" do
-    inactive_user # TODO: remove reference after satisfying rubocop RSpec/LetSetup properly
+    inactive_user
 
     visit "/stories/new"
     fill_in "URL", with: "https://example.com/?lobsters"
@@ -227,13 +224,12 @@ RSpec.feature "Submitting Stories", type: :feature do
     select :tag1, from: "Tags"
     click_button "Submit"
 
-    # submitted but attribution stripped
     expect(Story.last.url).to_not include("lobsters")
     expect(ModNote.last.user).to eq(user)
   end
 
   scenario "brigading" do
-    inactive_user # TODO: remove reference after satisfying rubocop RSpec/LetSetup properly
+    inactive_user
 
     expect {
       visit "/stories/new"
