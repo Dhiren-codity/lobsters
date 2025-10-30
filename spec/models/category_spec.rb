@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 describe Category do
@@ -37,7 +35,8 @@ describe Category do
     end
 
     it "logs on update" do
-      expect { Category.first.update(category: "new_category_name", edit_user_id: edit_user.id) }
+      category = Category.create(category: "old_category", edit_user_id: edit_user.id)
+      expect { category.update(category: "new_category_name", edit_user_id: edit_user.id) }
         .to change { Moderation.count }.by(1)
       mod = Moderation.last
       expect(mod.action).to include "new_category_name"
