@@ -18,7 +18,7 @@ RSpec.describe LoginController, type: :controller do
     context 'when user is wiped' do
       it 'renders the index with an error' do
         post :login, params: { email: wiped_user.email, password: 'password' }
-        expect(flash.now[:error]).to include('Your account was banned or deleted')
+        expect(flash.now[:error]).to eq('Your account was banned or deleted before the site changed admins. Your email and password hash were wiped for privacy.')
         expect(response).to render_template('index')
       end
     end
@@ -26,7 +26,7 @@ RSpec.describe LoginController, type: :controller do
     context 'when password is too long' do
       it 'renders the index with an error' do
         post :login, params: { email: user.email, password: 'a' * 73 }
-        expect(flash.now[:error]).to include('BCrypt passwords need to be less than 72 bytes')
+        expect(flash.now[:error]).to eq("BCrypt passwords need to be less than 72 bytes, you'll have to reset to set a shorter one, sorry for the hassle.")
         expect(response).to render_template('index')
       end
     end
@@ -42,7 +42,7 @@ RSpec.describe LoginController, type: :controller do
     context 'when user is banned' do
       it 'renders the index with an error' do
         post :login, params: { email: banned_user.email, password: 'password' }
-        expect(flash.now[:error]).to include('Your account has been banned')
+        expect(flash.now[:error]).to eq("Your account has been banned. Log: #{banned_user.banned_reason}")
         expect(response).to render_template('index')
       end
     end
@@ -84,7 +84,7 @@ RSpec.describe LoginController, type: :controller do
     context 'when user is wiped' do
       it 'renders forgot_password with an error' do
         post :reset_password, params: { email: wiped_user.email }
-        expect(flash.now[:error]).to include('your account was deleted before the site changed admins')
+        expect(flash.now[:error]).to eq("It's not possible to reset your password because your account was deleted before the site changed admins and your email address was wiped for privacy.")
         expect(response).to render_template(:forgot_password)
       end
     end
@@ -99,12 +99,12 @@ RSpec.describe LoginController, type: :controller do
   end
 
   describe 'POST #set_new_password' do
-    let(:reset_user) { create(:user, password_reset_token: '12345-abcdef') }
+    let(:reset_user) { create(:user, password_reset_token: "#{Time.current.to_i}-token") }
 
     context 'when token is invalid' do
       it 'redirects to forgot_password with an error' do
         post :set_new_password, params: { password_reset_token: 'invalid-token' }
-        expect(flash[:error]).to include('Invalid reset token')
+        expect(flash[:error]).to eq('Invalid reset token.  It may have already been used or you may have copied it incorrectly.')
         expect(response).to redirect_to(forgot_password_path)
       end
     end
@@ -112,7 +112,7 @@ RSpec.describe LoginController, type: :controller do
     context 'when token is valid' do
       it 'resets the password and redirects to root' do
         post :set_new_password, params: { password_reset_token: reset_user.password_reset_token, password: 'newpassword', password_confirmation: 'newpassword' }
-        expect(reset_user.reload.authenticate('newpassword')).to be_truthy
+        expect(session[:u]).to eq(reset_user.reload.session_token)
         expect(response).to redirect_to('/')
       end
     end
@@ -125,20 +125,20 @@ RSpec.describe LoginController, type: :controller do
       session[:twofa_u] = twofa_user.session_token
     end
 
-    context 'when TOTP code is correct' do
-      it 'redirects to root' do
-        allow(twofa_user).to receive(:authenticate_totp).and_return(true)
-        post :twofa_verify, params: { totp_code: '123456' }
-        expect(response).to redirect_to('/')
+    context 'when TOTP code is invalid' do
+      it 'redirects to /login/2fa with an error' do
+        post :twofa_verify, params: { totp_code: 'invalid' }
+        expect(flash[:error]).to eq('Your TOTP code did not match.  Please try again.')
+        expect(response).to redirect_to('/login/2fa')
       end
     end
 
-    context 'when TOTP code is incorrect' do
-      it 'redirects to /login/2fa with an error' do
-        allow(twofa_user).to receive(:authenticate_totp).and_return(false)
-        post :twofa_verify, params: { totp_code: 'wrongcode' }
-        expect(flash[:error]).to include('Your TOTP code did not match')
-        expect(response).to redirect_to('/login/2fa')
+    context 'when TOTP code is valid' do
+      it 'redirects to root' do
+        allow(twofa_user).to receive(:authenticate_totp).and_return(true)
+        post :twofa_verify, params: { totp_code: 'valid' }
+        expect(session[:u]).to eq(twofa_user.session_token)
+        expect(response).to redirect_to('/')
       end
     end
   end
