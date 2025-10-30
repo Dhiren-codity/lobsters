@@ -280,7 +280,6 @@ RSpec.describe StoriesController do
     context 'when URL is present' do
       it 'renders the form errors partial' do
         allow_any_instance_of(Story).to receive(:check_already_posted_recently?).and_return(false)
-        allow(Link).to receive(:recently_linked_from_comments).and_return([])
 
         post :check_url_dupe, params: { story: { url: 'http://example.com' } }
         expect(response).to render_template(partial: 'stories/form_errors')
