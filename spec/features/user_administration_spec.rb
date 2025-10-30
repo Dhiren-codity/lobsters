@@ -1,5 +1,3 @@
-# typed: false
-
 require "rails_helper"
 
 RSpec.feature "User Administration" do
@@ -53,15 +51,15 @@ RSpec.feature "User Administration" do
 
   scenario "banning deactivated user doesn't email" do
     user = create(:user, :deleted)
-    expect(user.is_banned?).to be(false) # don't want to couple by naming all the fields
+    expect(user.is_banned?).to be(false)
     visit user_path(user)
     expect(page).to have_content("Deactivated")
     fill_in "Reason", with: "And stay out"
     click_on "Ban"
     expect(page).to have_content("banned")
     user.reload
-    expect(user.is_banned?).to be(true) # not repeating functionality from above
-    expect(sent_emails.size).to eq(0) # we don't send any emails to deleted users
+    expect(user.is_banned?).to be(true)
+    expect(sent_emails.size).to eq(0)
   end
 
   scenario "unbanning" do
