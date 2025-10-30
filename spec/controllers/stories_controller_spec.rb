@@ -116,11 +116,10 @@ RSpec.describe StoriesController do
   describe '#show' do
     context 'when story is merged' do
       it 'redirects to the merged story' do
-        merged_story = create(:story)
-        allow(story).to receive(:merged_into_story).and_return(merged_story)
+        allow(story).to receive(:merged_into_story).and_return(create(:story))
 
         get :show, params: { id: story.short_id }
-        expect(response).to redirect_to(Routes.title_path(merged_story))
+        expect(response).to redirect_to(Routes.title_path(story.merged_into_story))
       end
     end
 
