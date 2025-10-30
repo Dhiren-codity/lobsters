@@ -1,17 +1,13 @@
-# typed: false
-
 require "rails_helper"
 
 RSpec.feature "Reading Homepage", type: :feature do
   feature "/newest" do
     it "shows stories, most-recent first" do
-      # this creates the old record first because some code uses Story.id (an autoincrementing int)
-      # as a proxy for creation order to sort by date
       create(:story, title: "older story", created_at: 2.hours.ago)
       create(:story, title: "newer story", created_at: 1.hour.ago)
       visit "/newest"
       body = page.body
-      expect(body.index("older_story")).to be > body.index("newer story")
+      expect(body.index("older story")).to be > body.index("newer story")
     end
 
     it "displays 'Last Read' marker at the last loaded position and maintains last_read_timestamp through pagination accordingly" do
@@ -62,10 +58,10 @@ RSpec.feature "Reading Homepage", type: :feature do
 
       create(:comment, comment: "comment 1", created_at: 3.hours.ago)
       create(:comment, comment: "comment 2", created_at: 3.hours.ago)
-      create(:comment, comment: "comment 3", created_at: 1.hours.ago)
-      create(:comment, comment: "comment 4", created_at: 1.hours.ago)
-      create(:comment, comment: "comment 5", created_at: 1.hours.ago)
-      create(:comment, comment: "comment 6", created_at: 1.hours.ago)
+      create(:comment, comment: "comment 3", created_at: 1.hour.ago)
+      create(:comment, comment: "comment 4", created_at: 1.hour.ago)
+      create(:comment, comment: "comment 5", created_at: 1.hour.ago)
+      create(:comment, comment: "comment 6", created_at: 1.hour.ago)
 
       visit "/comments"
       expect(page.body).not_to include("Last Read")
