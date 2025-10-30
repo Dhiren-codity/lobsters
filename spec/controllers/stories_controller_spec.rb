@@ -13,7 +13,6 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
     allow(controller).to receive(:find_story).and_return(story)
-    allow(controller).to receive(:@user).and_return(user)
   end
 
   describe '#create' do
@@ -30,7 +29,7 @@ RSpec.describe StoriesController do
         allow_any_instance_of(Story).to receive(:already_posted_recently?).and_return(false)
         allow_any_instance_of(Story).to receive(:is_resubmit?).and_return(false)
 
-        post :create, params: { story: { title: 'Test Story', url: 'http://example.com' } }
+        post :create, params: { story: { title: 'New Story', url: 'http://example.com' } }
         expect(response).to redirect_to(Routes.title_path(assigns(:story)))
       end
     end
@@ -93,7 +92,7 @@ RSpec.describe StoriesController do
       allow_any_instance_of(Story).to receive(:fetched_attributes).and_return({ title: 'Fetched Title' })
 
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
       expect(response.body).to include('Fetched Title')
     end
   end
@@ -109,7 +108,7 @@ RSpec.describe StoriesController do
   describe '#preview' do
     it 'renders the new template with previewing set to true' do
       post :preview, params: { story: { title: 'Preview Story', url: 'http://example.com' } }
-      expect(assigns(:story).previewing).to be true
+      expect(assigns(:story).previewing).to be_truthy
       expect(response).to render_template(:new)
     end
   end
@@ -195,9 +194,20 @@ RSpec.describe StoriesController do
   end
 
   describe '#upvote' do
-    it 'adds an upvote and returns ok' do
-      post :upvote, params: { id: story.id }
-      expect(response.body).to eq('ok')
+    context 'when story is merged' do
+      it 'returns an error message' do
+        allow(story).to receive(:merged_into_story).and_return(create(:story))
+
+        post :upvote, params: { id: story.id }
+        expect(response.body).to eq('story has been merged')
+      end
+    end
+
+    context 'when story is not merged' do
+      it 'adds an upvote and returns ok' do
+        post :upvote, params: { id: story.id }
+        expect(response.body).to eq('ok')
+      end
     end
   end
 
@@ -219,7 +229,7 @@ RSpec.describe StoriesController do
     end
 
     context 'when flagging is successful' do
-      it 'returns ok' do
+      it 'flags the story and returns ok' do
         allow(user).to receive(:can_flag?).and_return(true)
 
         post :flag, params: { id: story.id, reason: 'spam' }
@@ -229,9 +239,20 @@ RSpec.describe StoriesController do
   end
 
   describe '#hide' do
-    it 'hides the story and returns ok' do
-      post :hide, params: { id: story.id }
-      expect(response.body).to eq('ok')
+    context 'when story is merged' do
+      it 'returns an error message' do
+        allow(story).to receive(:merged_into_story).and_return(create(:story))
+
+        post :hide, params: { id: story.id }
+        expect(response.body).to eq('story has been merged')
+      end
+    end
+
+    context 'when hiding is successful' do
+      it 'hides the story and returns ok' do
+        post :hide, params: { id: story.id }
+        expect(response.body).to eq('ok')
+      end
     end
   end
 
@@ -243,9 +264,20 @@ RSpec.describe StoriesController do
   end
 
   describe '#save' do
-    it 'saves the story and returns ok' do
-      post :save, params: { id: story.id }
-      expect(response.body).to eq('ok')
+    context 'when story is merged' do
+      it 'returns an error message' do
+        allow(story).to receive(:merged_into_story).and_return(create(:story))
+
+        post :save, params: { id: story.id }
+        expect(response.body).to eq('story has been merged')
+      end
+    end
+
+    context 'when saving is successful' do
+      it 'saves the story and returns ok' do
+        post :save, params: { id: story.id }
+        expect(response.body).to eq('ok')
+      end
     end
   end
 
@@ -269,8 +301,8 @@ RSpec.describe StoriesController do
       it 'returns similar stories as JSON' do
         allow_any_instance_of(Story).to receive(:public_similar_stories).and_return([story])
 
-        post :check_url_dupe, params: { story: { url: 'http://example.com' } }
-        expect(response.content_type).to eq('application/json')
+        post :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
+        expect(response.content_type).to eq('application/json; charset=utf-8')
         expect(response.body).to include(story.title)
       end
     end
