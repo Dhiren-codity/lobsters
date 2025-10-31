@@ -103,7 +103,7 @@ RSpec.describe StoriesController do
   describe '#fetch_url_attributes' do
     it 'returns fetched attributes as JSON' do
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 
@@ -265,7 +265,7 @@ RSpec.describe StoriesController do
       allow(controller).to receive(:update_resubmit_comment_attributes).and_return(true)
       allow_any_instance_of(Story).to receive(:check_already_posted_recently?).and_return(true)
       post :check_url_dupe, params: { story: { url: 'http://example.com' } }
-      expect(response.content_type).to eq('text/html')
+      expect(response.content_type).to eq('text/html; charset=utf-8')
     end
   end
 
