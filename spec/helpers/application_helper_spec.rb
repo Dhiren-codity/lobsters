@@ -2,7 +2,7 @@ require 'rails_helper'
 
 describe ApplicationHelper do
   describe "#avatar_img" do
-    let(:user) { double("User", avatar_path: "/path/to/avatar", username: "testuser") }
+    let(:user) { FactoryBot.create(:user, avatar_path: "/path/to/avatar", username: "testuser") }
 
     it "returns an image tag with the correct attributes" do
       result = helper.avatar_img(user, 50)
@@ -36,7 +36,7 @@ describe ApplicationHelper do
   end
 
   describe "#filtered_tags" do
-    let(:user) { double("User", tag_filter_tags: ["tag1", "tag2"]) }
+    let(:user) { FactoryBot.create(:user, tag_filter_tags: ["tag1", "tag2"]) }
 
     it "returns user-specific tags if user is present" do
       assign(:user, user)
@@ -52,7 +52,7 @@ describe ApplicationHelper do
 
   describe "#inline_avatar_for" do
     let(:viewer) { double("Viewer", show_avatars?: true) }
-    let(:user) { double("User", avatar_path: "/path/to/avatar", username: "testuser") }
+    let(:user) { FactoryBot.create(:user, avatar_path: "/path/to/avatar", username: "testuser") }
 
     it "returns a link to the user's avatar if viewer is present and shows avatars" do
       expect(helper.inline_avatar_for(viewer, user)).to include("a")
@@ -101,8 +101,8 @@ describe ApplicationHelper do
   end
 
   describe "#possible_flag_warning" do
-    let(:showing_user) { double("User") }
-    let(:user) { double("User") }
+    let(:showing_user) { FactoryBot.create(:user) }
+    let(:user) { FactoryBot.create(:user) }
 
     before do
       allow(helper).to receive(:self_or_mod).and_return(true)
@@ -124,7 +124,7 @@ describe ApplicationHelper do
   end
 
   describe "#tag_link" do
-    let(:tag) { double("Tag", tag: "ruby", css_class: "tag-class", description: "A programming language") }
+    let(:tag) { FactoryBot.create(:tag, tag: "ruby", css_class: "tag-class", description: "A programming language") }
 
     it "returns a link to the tag with the correct attributes" do
       allow(helper).to receive(:filtered_tags).and_return([])
@@ -143,7 +143,7 @@ describe ApplicationHelper do
   end
 
   describe "#how_long_ago_label" do
-    let(:time) { Time.now }
+    let(:time) { Time.current }
 
     it "returns a time tag with the correct attributes" do
       result = helper.how_long_ago_label(time)
@@ -155,7 +155,7 @@ describe ApplicationHelper do
   end
 
   describe "#how_long_ago_link" do
-    let(:time) { Time.now }
+    let(:time) { Time.current }
     let(:url) { "https://example.com" }
 
     it "returns a link with the correct attributes" do
