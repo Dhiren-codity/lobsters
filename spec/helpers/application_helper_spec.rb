@@ -36,11 +36,13 @@ describe ApplicationHelper do
   end
 
   describe "#filtered_tags" do
-    let(:user) { FactoryBot.create(:user, tag_filter_tags: ["tag1", "tag2"]) }
+    let(:user) { FactoryBot.create(:user) }
+    let(:tags) { [FactoryBot.create(:tag, tag: "tag1"), FactoryBot.create(:tag, tag: "tag2")] }
 
     it "returns user-specific tags if user is present" do
+      allow(user).to receive(:tag_filter_tags).and_return(tags)
       assign(:user, user)
-      expect(helper.filtered_tags).to eq(["tag1", "tag2"])
+      expect(helper.filtered_tags).to eq(tags)
     end
 
     it "returns tags from cookies if user is not present" do
@@ -77,7 +79,7 @@ describe ApplicationHelper do
     end
 
     it "returns a link with the correct class when on a different page" do
-      result = helper.link_to_different_page("Next", "/different/page/2")
+      result = helper.link_to_different_page("Next", "/different/page/2".dup)
       expect(result).to include("a")
       expect(result).to include("Next")
       expect(result).to include("href=\"/different/page/2\"")
@@ -85,7 +87,7 @@ describe ApplicationHelper do
     end
 
     it "returns a link with the current_page class when on the same page" do
-      result = helper.link_to_different_page("Current", "/current/page/1")
+      result = helper.link_to_different_page("Current", "/current/page/1".dup)
       expect(result).to include("a")
       expect(result).to include("Current")
       expect(result).to include("href=\"/current/page/1\"")
