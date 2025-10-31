@@ -7,10 +7,11 @@ RSpec.describe StoriesController do
   let(:invalid_attributes) { { title: '', url: '', description: '' } }
 
   before do
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
     allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
-    allow(controller).to receive(:find_user_story).and_return(story)
     allow(controller).to receive(:track_story_reads).and_yield
   end
 
@@ -37,7 +38,8 @@ RSpec.describe StoriesController do
 
       it 'renders the new template' do
         post :create, params: { story: invalid_attributes }
-        expect(response).to render_template('new')
+        expect(response).to be_successful
+        expect(response.body).to include("Submit Story")
       end
     end
   end
@@ -81,7 +83,8 @@ RSpec.describe StoriesController do
     context 'when user is authorized' do
       it 'renders the edit template' do
         get :edit, params: { id: story.to_param }
-        expect(response).to render_template('edit')
+        expect(response).to be_successful
+        expect(response.body).to include("Edit Story")
       end
     end
 
@@ -102,7 +105,8 @@ RSpec.describe StoriesController do
     context 'when story is found' do
       it 'renders the show template' do
         get :show, params: { id: story.to_param }
-        expect(response).to render_template('show')
+        expect(response).to be_successful
+        expect(response.body).to include(story.title)
       end
     end
 
@@ -134,7 +138,8 @@ RSpec.describe StoriesController do
     context 'with invalid params' do
       it 'renders the edit template' do
         patch :update, params: { id: story.to_param, story: invalid_attributes }
-        expect(response).to render_template('edit')
+        expect(response).to be_successful
+        expect(response.body).to include("Edit Story")
       end
     end
   end
