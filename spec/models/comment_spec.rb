@@ -94,7 +94,8 @@ RSpec.describe Comment do
   describe "#gone_text" do
     it "returns text for moderated comment" do
       moderator = create(:user, :moderator)
-      comment = create(:comment, is_moderated: true, moderation: create(:moderation, moderator: moderator))
+      moderation = create(:moderation, moderator: moderator)
+      comment = create(:comment, is_moderated: true, moderation: moderation)
       expect(comment.gone_text).to include("Comment removed by moderator")
     end
   end
