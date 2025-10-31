@@ -2,11 +2,9 @@ require 'rails_helper'
 
 describe ApplicationHelper do
   describe "#avatar_img" do
-    let(:user) { double("User", avatar_path: "/path/to/avatar", username: "testuser") }
+    let(:user) { FactoryBot.create(:user, avatar_path: "/path/to/avatar", username: "testuser") }
 
     it "returns an image tag with the correct attributes" do
-      allow(user).to receive(:avatar_path).with(50).and_return("/path/to/avatar")
-      allow(user).to receive(:avatar_path).with(100).and_return("/path/to/avatar")
       result = helper.avatar_img(user, 50)
       expect(result).to include("img")
       expect(result).to include("src=\"/path/to/avatar\"")
@@ -40,7 +38,7 @@ describe ApplicationHelper do
   end
 
   describe "#filtered_tags" do
-    let(:user) { double("User", tag_filter_tags: ["tag1", "tag2"]) }
+    let(:user) { FactoryBot.create(:user, tag_filter_tags: ["tag1", "tag2"]) }
 
     it "returns user-specific tags if user is present" do
       assign(:user, user)
@@ -48,7 +46,7 @@ describe ApplicationHelper do
     end
 
     it "returns tags from cookies if user is not present" do
-      allow(helper).to receive(:cookies).and_return({ "tag_filter" => "tag3,tag4" })
+      allow(helper).to receive(:cookies).and_return({ ApplicationController::TAG_FILTER_COOKIE => "tag3,tag4" })
       expect(Tag).to receive(:where).with(tag: ["tag3", "tag4"]).and_return(["tag3", "tag4"])
       expect(helper.filtered_tags).to eq(["tag3", "tag4"])
     end
@@ -56,7 +54,7 @@ describe ApplicationHelper do
 
   describe "#inline_avatar_for" do
     let(:viewer) { double("Viewer", show_avatars?: true) }
-    let(:user) { double("User", avatar_path: "/path/to/avatar", username: "testuser") }
+    let(:user) { FactoryBot.create(:user, avatar_path: "/path/to/avatar", username: "testuser") }
 
     it "returns a link to the user's avatar if viewer is present and shows avatars" do
       allow(helper).to receive(:user_path).with(user).and_return("/user_path")
@@ -80,12 +78,12 @@ describe ApplicationHelper do
     end
 
     it "adds current_page class if the path matches the current path" do
-      result = helper.link_to_different_page("Link", "/current/page")
+      result = helper.link_to_different_page("Link", "/current/page".dup)
       expect(result).to include("class=\"current_page\"")
     end
 
     it "does not add current_page class if the path does not match the current path" do
-      result = helper.link_to_different_page("Link", "/different/page")
+      result = helper.link_to_different_page("Link", "/different/page".dup)
       expect(result).not_to include("class=\"current_page\"")
     end
   end
@@ -98,8 +96,8 @@ describe ApplicationHelper do
   end
 
   describe "#possible_flag_warning" do
-    let(:showing_user) { double("User") }
-    let(:user) { double("User") }
+    let(:showing_user) { FactoryBot.create(:user) }
+    let(:user) { FactoryBot.create(:user) }
 
     it "renders dev_flag_warning partial in non-production environments" do
       allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("development"))
@@ -138,7 +136,7 @@ describe ApplicationHelper do
   end
 
   describe "#how_long_ago_label" do
-    let(:time) { Time.now }
+    let(:time) { Time.zone.now }
 
     it "returns a time tag with correct attributes" do
       allow(helper).to receive(:how_long_ago).with(time).and_return("5 minutes ago")
@@ -151,7 +149,7 @@ describe ApplicationHelper do
   end
 
   describe "#how_long_ago_link" do
-    let(:time) { Time.now }
+    let(:time) { Time.zone.now }
     let(:url) { "http://example.com" }
 
     it "returns a link with a time label" do
