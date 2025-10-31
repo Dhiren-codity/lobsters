@@ -7,10 +7,11 @@ RSpec.describe StoriesController do
   let(:invalid_attributes) { { title: '', url: '', description: '' } }
 
   before do
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
     allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
-    allow(controller).to receive(:find_user_story).and_return(story)
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
   end
@@ -32,7 +33,8 @@ RSpec.describe StoriesController do
     context 'with invalid params' do
       it 'renders the new template' do
         post :create, params: { story: invalid_attributes }
-        expect(response).to render_template('new')
+        expect(response).to be_successful
+        expect(response.body).to include("Submit Story")
       end
     end
   end
@@ -70,7 +72,8 @@ RSpec.describe StoriesController do
     context 'when user can edit the story' do
       it 'renders the edit template' do
         get :edit, params: { id: story.to_param }
-        expect(response).to render_template('edit')
+        expect(response).to be_successful
+        expect(response.body).to include("Edit Story")
       end
     end
 
@@ -89,7 +92,7 @@ RSpec.describe StoriesController do
 
   describe 'GET #fetch_url_attributes' do
     it 'returns fetched attributes as JSON' do
-      get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
+      get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }, format: :json
       expect(response.content_type).to eq('application/json')
     end
   end
@@ -97,14 +100,16 @@ RSpec.describe StoriesController do
   describe 'GET #new' do
     it 'renders the new template' do
       get :new
-      expect(response).to render_template('new')
+      expect(response).to be_successful
+      expect(response.body).to include("Submit Story")
     end
   end
 
   describe 'POST #preview' do
     it 'renders the new template with preview layout' do
       post :preview, params: { story: valid_attributes }
-      expect(response).to render_template('new')
+      expect(response).to be_successful
+      expect(response.body).to include("Submit Story")
     end
   end
 
@@ -112,7 +117,8 @@ RSpec.describe StoriesController do
     context 'when story is visible' do
       it 'renders the show template' do
         get :show, params: { id: story.to_param }
-        expect(response).to render_template('show')
+        expect(response).to be_successful
+        expect(response.body).to include(story.title)
       end
     end
 
@@ -123,8 +129,8 @@ RSpec.describe StoriesController do
 
       it 'renders the missing template with 404 status' do
         get :show, params: { id: story.to_param }
-        expect(response).to render_template('_missing')
         expect(response.status).to eq(404)
+        expect(response.body).to include("missing")
       end
     end
   end
@@ -146,7 +152,8 @@ RSpec.describe StoriesController do
     context 'with invalid params' do
       it 'renders the edit template' do
         patch :update, params: { id: story.to_param, story: invalid_attributes }
-        expect(response).to render_template('edit')
+        expect(response).to be_successful
+        expect(response.body).to include("Edit Story")
       end
     end
   end
@@ -251,7 +258,7 @@ RSpec.describe StoriesController do
   describe 'POST #check_url_dupe' do
     context 'when URL is provided' do
       it 'returns similar stories as JSON' do
-        post :check_url_dupe, params: { story: { url: 'http://example.com' } }
+        post :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
         expect(response.content_type).to eq('application/json')
       end
     end
