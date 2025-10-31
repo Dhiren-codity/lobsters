@@ -11,6 +11,8 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
     allow(controller).to receive(:find_user_story).and_return(story)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe '#create' do
