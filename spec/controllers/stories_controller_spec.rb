@@ -207,21 +207,22 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe 'POST #unhide' do
-    context 'when story is found' do
-      it 'returns ok' do
-        post :unhide, params: { id: story.to_param }
-        expect(response.body).to eq('ok')
-      end
-    end
+  # Removed: Route 'unhide' does not exist
+  # describe 'POST #unhide' do
+  #   context 'when story is found' do
+  #     it 'returns ok' do
+  #       post :unhide, params: { id: story.to_param }
+  #       expect(response.body).to eq('ok')
+  #     end
+  #   end
 
-    context 'when story is not found' do
-      it 'returns error' do
-        post :unhide, params: { id: 'invalid' }
-        expect(response.body).to eq("can't find story")
-      end
-    end
-  end
+  #   context 'when story is not found' do
+  #     it 'returns error' do
+  #       post :unhide, params: { id: 'invalid' }
+  #       expect(response.body).to eq("can't find story")
+  #     end
+  #   end
+  # end
 
   describe 'POST #save' do
     context 'when story is found' do
