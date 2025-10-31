@@ -23,7 +23,7 @@ RSpec.describe StoriesController do
 
       it 'redirects to the created story' do
         post :create, params: { story: valid_attributes }
-        expect(response).to redirect_to(Routes.title_path(Story.last))
+        expect(response).to redirect_to(story_path(Story.last))
       end
     end
 
@@ -46,7 +46,7 @@ RSpec.describe StoriesController do
 
       it 'redirects to the stories list' do
         delete :destroy, params: { id: story.to_param }
-        expect(response).to redirect_to(Routes.title_path(story))
+        expect(response).to redirect_to(story_path(story))
       end
     end
   end
@@ -104,7 +104,7 @@ RSpec.describe StoriesController do
 
       it 'redirects to the story' do
         patch :update, params: { id: story.to_param, story: valid_attributes }
-        expect(response).to redirect_to(Routes.title_path(story))
+        expect(response).to redirect_to(story_path(story))
       end
     end
 
@@ -175,7 +175,7 @@ RSpec.describe StoriesController do
   describe '#disown' do
     it 'disowns the story' do
       post :disown, params: { id: story.to_param }
-      expect(response).to redirect_to(Routes.title_path(story))
+      expect(response).to redirect_to(story_path(story))
     end
   end
 end
