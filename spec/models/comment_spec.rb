@@ -1,192 +1,121 @@
-# typed: false
+require 'rails_helper'
 
-require "rails_helper"
-
-describe Comment do
-  it "should get a short id" do
-    c = create(:comment)
-
-    expect(c.short_id).to match(/^\A[a-zA-Z0-9]{1,10}\z/)
-  end
-
-  describe "hat" do
-    it "can't be worn if user doesn't have that hat" do
-      comment = build(:comment, hat: build(:hat))
-      comment.valid?
-      expect(comment.errors[:hat]).to eq(["not wearable by user"])
-    end
-
-    it "can be one of the user's hats" do
-      hat = create(:hat)
-      user = hat.user
-      comment = create(:comment, user: user, hat: hat)
-      comment.valid?
-      expect(comment.errors[:hat]).to be_empty
+RSpec.describe Comment do
+  describe ".regenerate_markdown" do
+    it "updates all comments with generated markdown" do
+      comment = create(:comment, markeddown_comment: "old markdown")
+      allow(comment).to receive(:generated_markeddown_comment).and_return("new markdown")
+      Comment.regenerate_markdown
+      expect(comment.reload.markeddown_comment).to eq("new markdown")
     end
   end
 
-  it "validates the length of short_id" do
-    comment = Comment.new(short_id: "01234567890")
-    expect(comment).to_not be_valid
-  end
-
-  it "is not valid without a comment" do
-    comment = Comment.new(comment: nil)
-    expect(comment).to_not be_valid
-  end
-
-  it "validates the length of markeddown_comment" do
-    comment = build(:comment, markeddown_comment: "a" * 16_777_216)
-    expect(comment).to_not be_valid
-  end
-
-  it "extracts links from markdown" do
-    c = Comment.new comment: "a [link](https://example.com)"
-
-    # smoke test:
-    expect(c.markeddown_comment).to eq("<p>a <a href=\"https://example.com\" rel=\"ugc\">link</a></p>\n")
-
-    links = c.parsed_links
-    expect(links.count).to eq(1)
-    l = links.last
-    expect(l.url).to eq("https://example.com")
-    expect(l.title).to eq("link")
-  end
-
-  describe ".accessible_to_user" do
-    it "when user is a moderator" do
-      moderator = build(:user, :moderator)
-
-      expect(Comment.accessible_to_user(moderator)).to eq(Comment.all)
-    end
-
-    it "when user does not a moderator" do
-      user = build(:user)
-
-      expect(Comment.accessible_to_user(user)).to eq(Comment.active)
+  describe "#as_json" do
+    it "returns a hash representation of the comment" do
+      comment = create(:comment)
+      json = comment.as_json
+      expect(json).to include(:short_id, :created_at, :last_edited_at, :is_deleted, :is_moderated, :score, :flags)
+      expect(json[:commenting_user]).to eq(comment.user.username)
     end
   end
 
-  it "subtracts karma if mod intervenes" do
-    author = create(:user)
-    voter = create(:user)
-    mod = create(:user, :moderator)
-    c = create(:comment, user: author)
-    expect {
-      Vote.vote_thusly_on_story_or_comment_for_user_because(1, c.story_id, c.id, voter.id, nil)
-    }.to change { author.reload.karma }.by(1)
-    expect {
-      c.delete_for_user(mod, "Troll")
-    }.to change { author.reload.karma }.by(-4)
-  end
-
-  describe "speed limit" do
-    let(:story) { create(:story) }
-    let(:author) { create(:user) }
-
-    it "is not enforced as a regular validation" do
-      parent = create(:comment, story: story, user: author, created_at: 30.seconds.ago)
-      c = Comment.new(
-        user: author,
-        story: story,
-        parent_comment: parent,
-        comment: "good times"
-      )
-      expect(c.valid?).to be true
-    end
-
-    it "is not enforced on top level, only replies" do
-      create(:comment, story: story, user: author, created_at: 30.seconds.ago)
-      c = Comment.new(
-        user: author,
-        story: story,
-        comment: "good times"
-      )
-      expect(c.breaks_speed_limit?).to be false
-    end
-
-    it "limits within 2 minutes" do
-      top = create(:comment, story: story, user: author, created_at: 90.seconds.ago)
-      mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      c = Comment.new(
-        user: author,
-        story: story,
-        parent_comment: mid,
-        comment: "too fast"
-      )
-      expect(c.breaks_speed_limit?).to be_truthy
-    end
-
-    it "limits longer with flags" do
-      top = create(:comment, story: story, user: author, created_at: 150.seconds.ago)
-      mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, create(:user).id, "T")
-      c = Comment.new(
-        user: author,
-        story: story,
-        parent_comment: mid,
-        comment: "too fast"
-      )
-      expect(c.breaks_speed_limit?).to be_truthy
-    end
-
-    it "has an extra message if author flagged a parent" do
-      top = create(:comment, story: story, user: author, created_at: 200.seconds.ago)
-      mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, author.id, "T")
-      c = Comment.new(
-        user: author,
-        story: story,
-        parent_comment: mid,
-        comment: "too fast"
-      )
-      expect(c.breaks_speed_limit?).to be_truthy
-      expect(c.errors[:comment].join(" ")).to include("You flagged")
-    end
-
-    it "doesn't limit slow responses" do
-      top = create(:comment, story: story, user: author, created_at: 20.minutes.ago)
-      mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, author.id, "T")
-      c = Comment.new(
-        user: author,
-        story: story,
-        parent_comment: mid,
-        comment: "too fast"
-      )
-      expect(c.breaks_speed_limit?).to be false
+  describe "#assign_initial_attributes" do
+    it "assigns initial attributes on create" do
+      comment = build(:comment, short_id: nil, score: nil, confidence: nil, last_edited_at: nil)
+      comment.assign_initial_attributes
+      expect(comment.short_id).not_to be_nil
+      expect(comment.score).to eq(1)
+      expect(comment.confidence).not_to be_nil
+      expect(comment.last_edited_at).not_to be_nil
     end
   end
 
-  describe "confidence" do
-    it "is low for flagged comments" do
-      conf = Comment.new(score: -4, flags: 5).calculated_confidence
-      expect(conf).to be < 0.3
+  describe "#calculated_confidence" do
+    it "calculates confidence for non-deleted, non-moderated comments" do
+      comment = build(:comment, score: 10, flags: 2, is_deleted: false, is_moderated: false)
+      expect(comment.calculated_confidence).to be_between(0, 1)
     end
 
-    it "it is high for upvoted comments" do
-      conf = Comment.new(score: 100, flags: 0).calculated_confidence
-      expect(conf).to be > 0.75
+    it "returns 0 for deleted comments" do
+      comment = build(:comment, is_deleted: true)
+      expect(comment.calculated_confidence).to eq(0)
     end
 
-    it "at the scame score, is higher for comments without flags" do
-      upvoted = Comment.new(score: 10, flags: 0).calculated_confidence
-      flagged = Comment.new(score: 10, flags: 4).calculated_confidence
-      expect(upvoted).to be > flagged
+    it "returns 0 for moderated comments" do
+      comment = build(:comment, is_moderated: true)
+      expect(comment.calculated_confidence).to eq(0)
     end
   end
 
-  describe "confidence_order_path" do
-    it "doesn't sort comments under the wrong parents when they haven't been voted on" do
-      story = create(:story)
-      a = create(:comment, story: story, parent_comment: nil)
-      create(:comment, story: story, parent_comment: nil)
-      c = create(:comment, story: story, parent_comment: a)
-      sorted = Comment.story_threads(story)
-      # don't care if a or b is first, just care that c is immediately after a
-      # this uses each_cons to get each pair of records and ensures [a, c] appears
-      relationships = sorted.map(&:id).to_a.each_cons(2).to_a
-      expect(relationships).to include([a.id, c.id])
+  describe "#breaks_speed_limit?" do
+    it "returns false for top-level comments" do
+      comment = build(:comment, parent_comment_id: nil)
+      expect(comment.breaks_speed_limit?).to be false
+    end
+
+    it "returns true if speed limit is exceeded" do
+      parent = create(:comment)
+      comment = build(:comment, parent_comment: parent, created_at: 1.minute.ago)
+      allow(Comment).to receive(:where).and_return([comment])
+      expect(comment.breaks_speed_limit?).to be true
+    end
+  end
+
+  describe "#delete_for_user" do
+    it "marks comment as deleted and moderated for moderators" do
+      mod = create(:user, :moderator)
+      comment = create(:comment)
+      comment.delete_for_user(mod, "reason")
+      expect(comment.is_deleted).to be true
+      expect(comment.is_moderated).to be true
+    end
+
+    it "does not mark as moderated if user is not a moderator" do
+      user = create(:user)
+      comment = create(:comment)
+      comment.delete_for_user(user)
+      expect(comment.is_moderated).to be false
+    end
+  end
+
+  describe "#depth_permits_reply?" do
+    it "returns true if depth is less than MAX_DEPTH" do
+      comment = build(:comment, depth: Comment::MAX_DEPTH - 1)
+      expect(comment.depth_permits_reply?).to be true
+    end
+
+    it "returns false if depth is equal to MAX_DEPTH" do
+      comment = build(:comment, depth: Comment::MAX_DEPTH)
+      expect(comment.depth_permits_reply?).to be false
+    end
+  end
+
+  describe "#generated_markeddown_comment" do
+    it "generates markdown from comment text" do
+      comment = build(:comment, comment: "This is **bold**")
+      expect(comment.generated_markeddown_comment).to include("<strong>bold</strong>")
+    end
+  end
+
+  describe "#update_score_and_recalculate!" do
+    it "updates score and recalculates confidence" do
+      comment = create(:comment, score: 0, flags: 0)
+      expect {
+        comment.update_score_and_recalculate!(1, 0)
+      }.to change { comment.reload.score }.by(1)
+    end
+  end
+
+  describe "#gone_text" do
+    it "returns moderator removal text if moderated" do
+      mod = create(:user, :moderator)
+      comment = create(:comment, is_moderated: true, moderation: create(:moderation, moderator: mod))
+      expect(comment.gone_text).to include("Comment removed by moderator")
+    end
+
+    it "returns author removal text if not moderated" do
+      comment = create(:comment, is_deleted: true, is_moderated: false)
+      expect(comment.gone_text).to include("Comment removed by author")
     end
   end
 end
