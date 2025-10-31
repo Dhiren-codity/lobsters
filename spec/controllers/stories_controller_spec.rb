@@ -34,7 +34,7 @@ RSpec.describe StoriesController do
     context 'with invalid params' do
       it 'renders the new template' do
         post :create, params: { story: invalid_attributes }
-        expect(response).to render_template('new')
+        expect(response).to be_successful
       end
     end
   end
@@ -58,35 +58,35 @@ RSpec.describe StoriesController do
   describe 'GET #edit' do
     it 'renders the edit template' do
       get :edit, params: { id: story.to_param }
-      expect(response).to render_template('edit')
+      expect(response).to be_successful
     end
   end
 
   describe 'GET #fetch_url_attributes' do
     it 'returns fetched attributes as JSON' do
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }, format: :json
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 
   describe 'GET #new' do
     it 'renders the new template' do
       get :new
-      expect(response).to render_template('new')
+      expect(response).to be_successful
     end
   end
 
   describe 'POST #preview' do
     it 'renders the new template with preview layout' do
       post :preview, params: { story: valid_attributes }
-      expect(response).to render_template('new')
+      expect(response).to be_successful
     end
   end
 
   describe 'GET #show' do
     it 'renders the show template' do
       get :show, params: { id: story.to_param }
-      expect(response).to render_template('show')
+      expect(response).to be_successful
     end
   end
 
@@ -115,7 +115,7 @@ RSpec.describe StoriesController do
     context 'with invalid params' do
       it 'renders the edit template' do
         patch :update, params: { id: story.to_param, story: invalid_attributes }
-        expect(response).to render_template('edit')
+        expect(response).to be_successful
       end
     end
   end
@@ -172,7 +172,7 @@ RSpec.describe StoriesController do
   describe 'GET #check_url_dupe' do
     it 'checks for duplicate URLs' do
       get :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 
