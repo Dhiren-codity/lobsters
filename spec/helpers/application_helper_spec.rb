@@ -5,6 +5,8 @@ describe ApplicationHelper do
     let(:user) { double("User", avatar_path: "/path/to/avatar", username: "testuser") }
 
     it "returns an image tag with the correct attributes" do
+      allow(user).to receive(:avatar_path).with(50).and_return("/path/to/avatar")
+      allow(user).to receive(:avatar_path).with(100).and_return("/path/to/avatar")
       result = helper.avatar_img(user, 50)
       expect(result).to include("img")
       expect(result).to include("src=\"/path/to/avatar\"")
@@ -21,6 +23,7 @@ describe ApplicationHelper do
     let(:object) { double("Object", errors: double("Errors", blank?: false, count: 2, full_messages: ["Name can't be blank", "Email is invalid"])) }
 
     it "returns formatted error messages" do
+      allow(object).to receive(:class).and_return(double(name: "Object"))
       result = helper.errors_for(object)
       expect(result).to include("flash-error")
       expect(result).to include("2 errors prohibited this object from being saved")
@@ -30,6 +33,7 @@ describe ApplicationHelper do
 
     it "handles specific error message kludge" do
       allow(object.errors).to receive(:full_messages).and_return(["Comments is invalid"])
+      allow(object).to receive(:class).and_return(double(name: "Object"))
       result = helper.errors_for(object)
       expect(result).to include("Comment is missing")
     end
@@ -55,6 +59,7 @@ describe ApplicationHelper do
     let(:user) { double("User", avatar_path: "/path/to/avatar", username: "testuser") }
 
     it "returns a link to the user's avatar if viewer is present and shows avatars" do
+      allow(helper).to receive(:user_path).with(user).and_return("/user_path")
       expect(helper.inline_avatar_for(viewer, user)).to include("a")
       expect(helper.inline_avatar_for(viewer, user)).to include("img")
     end
@@ -116,6 +121,7 @@ describe ApplicationHelper do
 
     it "returns a link to the tag with correct attributes" do
       allow(helper).to receive(:filtered_tags).and_return([])
+      allow(helper).to receive(:tag_path).with(tag).and_return("/tag_path")
       result = helper.tag_link(tag)
       expect(result).to include("a")
       expect(result).to include("tag_name")
@@ -125,6 +131,7 @@ describe ApplicationHelper do
 
     it "adds filtered class if tag is in filtered_tags" do
       allow(helper).to receive(:filtered_tags).and_return([tag])
+      allow(helper).to receive(:tag_path).with(tag).and_return("/tag_path")
       result = helper.tag_link(tag)
       expect(result).to include("filtered")
     end
@@ -134,6 +141,7 @@ describe ApplicationHelper do
     let(:time) { Time.now }
 
     it "returns a time tag with correct attributes" do
+      allow(helper).to receive(:how_long_ago).with(time).and_return("5 minutes ago")
       result = helper.how_long_ago_label(time)
       expect(result).to include("time")
       expect(result).to include("title=\"#{time.strftime("%F %T")}\"")
@@ -147,6 +155,7 @@ describe ApplicationHelper do
     let(:url) { "http://example.com" }
 
     it "returns a link with a time label" do
+      allow(helper).to receive(:how_long_ago_label).with(time).and_return("<time>5 minutes ago</time>")
       result = helper.how_long_ago_link(url, time)
       expect(result).to include("a")
       expect(result).to include("href=\"#{url}\"")
