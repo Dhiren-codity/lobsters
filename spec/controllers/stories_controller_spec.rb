@@ -13,6 +13,7 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:find_user_story).and_return(story)
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
+    controller.instance_variable_set(:@user, user)
   end
 
   describe "POST #create" do
