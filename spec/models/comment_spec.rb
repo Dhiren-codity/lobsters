@@ -56,7 +56,7 @@ RSpec.describe Comment do
     it "returns true if speed limit is exceeded" do
       parent = create(:comment)
       comment = build(:comment, parent_comment: parent, created_at: 1.minute.ago)
-      allow(Comment).to receive(:where).and_return([comment])
+      allow(Comment).to receive(:where).and_return(Comment.where(id: comment.id))
       expect(comment.breaks_speed_limit?).to be true
     end
   end
@@ -109,7 +109,8 @@ RSpec.describe Comment do
   describe "#gone_text" do
     it "returns moderator removal text if moderated" do
       mod = create(:user, :moderator)
-      comment = create(:comment, is_moderated: true, moderation: create(:moderation, moderator: mod))
+      moderation = create(:moderation, moderator: mod)
+      comment = create(:comment, is_moderated: true, moderation: moderation)
       expect(comment.gone_text).to include("Comment removed by moderator")
     end
 
