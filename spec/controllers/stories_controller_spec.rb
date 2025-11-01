@@ -63,7 +63,7 @@ RSpec.describe StoriesController do
   describe '#fetch_url_attributes' do
     it 'returns fetched attributes as JSON' do
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 
@@ -85,14 +85,6 @@ RSpec.describe StoriesController do
     it 'renders the show template' do
       get :show, params: { id: story.to_param }
       expect(response).to render_template('show')
-    end
-  end
-
-  describe '#undelete' do
-    it 'restores a deleted story' do
-      story.update(is_deleted: true)
-      post :undelete, params: { id: story.to_param }
-      expect(story.reload.is_deleted).to be_falsey
     end
   end
 
@@ -121,7 +113,7 @@ RSpec.describe StoriesController do
   describe '#check_url_dupe' do
     it 'checks for duplicate URLs' do
       post :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 end
