@@ -171,7 +171,7 @@ RSpec.describe StoriesController do
     it 'checks for duplicate URLs' do
       allow_any_instance_of(Story).to receive(:check_already_posted_recently?).and_return(true)
       post :check_url_dupe, params: { story: { url: 'http://example.com' } }
-      expect(response.content_type).to eq('text/html')
+      expect(response.content_type).to eq('text/html; charset=utf-8')
     end
   end
 end
