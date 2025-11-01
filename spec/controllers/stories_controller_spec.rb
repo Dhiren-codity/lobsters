@@ -13,6 +13,8 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:find_user_story).and_return(story)
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe 'POST #create' do
@@ -63,7 +65,7 @@ RSpec.describe StoriesController do
   describe 'GET #fetch_url_attributes' do
     it 'returns fetched attributes as JSON' do
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 
@@ -134,8 +136,7 @@ RSpec.describe StoriesController do
 
   describe 'POST #flag' do
     it 'flags the story with a valid reason' do
-      allow(Vote::STORY_REASONS).to receive(:[]).with('spam').and_return(true)
-      post :flag, params: { id: story.to_param, reason: 'spam' }
+      post :flag, params: { id: story.to_param, reason: Vote::STORY_REASONS.keys.first }
       expect(response.body).to eq('ok')
     end
   end
@@ -171,7 +172,7 @@ RSpec.describe StoriesController do
   describe 'GET #check_url_dupe' do
     it 'checks for duplicate URLs' do
       get :check_url_dupe, params: { story: { url: 'http://example.com' } }
-      expect(response.content_type).to eq('text/html')
+      expect(response.content_type).to eq('text/html; charset=utf-8')
     end
   end
 
