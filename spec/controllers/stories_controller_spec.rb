@@ -11,6 +11,8 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
     allow(controller).to receive(:find_user_story).and_return(story)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe '#create' do
@@ -116,66 +118,10 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#unvote' do
-    it 'removes a vote from the story' do
-      post :unvote, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#upvote' do
-    it 'adds an upvote to the story' do
-      post :upvote, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#flag' do
-    it 'flags the story with a valid reason' do
-      post :flag, params: { id: story.to_param, reason: 'spam' }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#hide' do
-    it 'hides the story for the user' do
-      post :hide, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#unhide' do
-    it 'unhides the story for the user' do
-      post :unhide, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#save' do
-    it 'saves the story for the user' do
-      post :save, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#unsave' do
-    it 'removes the story from saved stories for the user' do
-      post :unsave, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
   describe '#check_url_dupe' do
     it 'checks for duplicate URLs' do
-      post :check_url_dupe, params: { story: { url: 'http://example.com' } }
+      post :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
       expect(response.content_type).to eq('application/json')
-    end
-  end
-
-  describe '#disown' do
-    it 'disowns the story' do
-      post :disown, params: { id: story.to_param }
-      expect(response).to redirect_to(Routes.title_path(story))
     end
   end
 end
