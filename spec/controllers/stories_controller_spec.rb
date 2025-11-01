@@ -1,8 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe StoriesController do
-  let(:user) { create(:user) }
-  let(:story) { create(:story, user: user) }
+  let(:user) { FactoryBot.create(:user) }
+  let(:story) { FactoryBot.create(:story, user: user) }
   let(:valid_attributes) { { title: 'Test Story', url: 'http://example.com', description: 'A test story' } }
   let(:invalid_attributes) { { title: '', url: '', description: '' } }
 
@@ -14,6 +14,8 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
     allow(controller).to receive(:current_user).and_return(user)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe 'POST #create' do
@@ -47,7 +49,7 @@ RSpec.describe StoriesController do
   describe 'DELETE #destroy' do
     context 'when user is authorized' do
       it 'destroys the requested story' do
-        story_to_destroy = create(:story, user: user)
+        story_to_destroy = FactoryBot.create(:story, user: user)
         expect {
           delete :destroy, params: { id: story_to_destroy.to_param }
         }.to change(Story, :count).by(-1)
