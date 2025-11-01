@@ -1,8 +1,8 @@
 require 'rails_helper'
 
 RSpec.describe StoriesController do
-  let(:user) { create(:user) }
-  let(:story) { create(:story, user: user) }
+  let(:user) { FactoryBot.create(:user) }
+  let(:story) { FactoryBot.create(:story, user: user) }
   let(:valid_attributes) { { title: 'Test Story', url: 'http://example.com', description: 'A test story' } }
   let(:invalid_attributes) { { title: '', url: '', description: '' } }
 
