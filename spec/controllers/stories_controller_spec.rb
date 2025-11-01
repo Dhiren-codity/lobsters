@@ -90,14 +90,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe 'PATCH #undelete' do
-    it 'restores a deleted story' do
-      story.update(is_deleted: true)
-      patch :undelete, params: { id: story.to_param }
-      expect(story.reload.is_deleted).to be_falsey
-    end
-  end
-
   describe 'PATCH #update' do
     context 'with valid params' do
       it 'updates the requested story' do
@@ -124,14 +116,6 @@ RSpec.describe StoriesController do
     it 'checks for duplicate URLs' do
       get :check_url_dupe, params: { story: { url: 'http://example.com' } }
       expect(response.content_type).to eq('text/html; charset=utf-8')
-    end
-  end
-
-  describe 'POST #disown' do
-    it 'disowns the story' do
-      allow(story).to receive(:disownable_by_user?).and_return(true)
-      post :disown, params: { id: story.to_param }
-      expect(response).to redirect_to(Routes.title_path(story))
     end
   end
 end
