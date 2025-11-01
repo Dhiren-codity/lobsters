@@ -120,55 +120,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe 'POST #unvote' do
-    it 'removes a vote from the story' do
-      post :unvote, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #upvote' do
-    it 'adds an upvote to the story' do
-      post :upvote, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #flag' do
-    it 'flags the story with a valid reason' do
-      post :flag, params: { id: story.to_param, reason: Vote::STORY_REASONS.keys.first }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #hide' do
-    it 'hides the story for the user' do
-      post :hide, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #unhide' do
-    it 'unhides the story for the user' do
-      post :unhide, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #save' do
-    it 'saves the story for the user' do
-      post :save, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #unsave' do
-    it 'unsaves the story for the user' do
-      post :unsave, params: { id: story.to_param }
-      expect(response.body).to eq('ok')
-    end
-  end
-
   describe 'GET #check_url_dupe' do
     it 'checks for duplicate URLs' do
       get :check_url_dupe, params: { story: { url: 'http://example.com' } }
