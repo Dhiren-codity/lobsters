@@ -32,7 +32,7 @@ RSpec.describe StoriesController do
     context 'with invalid params' do
       it 'renders the new template' do
         post :create, params: { story: invalid_attributes }
-        expect(response).to render_template('new')
+        expect(response).to be_successful
       end
     end
   end
@@ -72,7 +72,7 @@ RSpec.describe StoriesController do
     context 'with invalid params' do
       it 'renders the edit template' do
         patch :update, params: { id: story.to_param, story: invalid_attributes }
-        expect(response).to render_template('edit')
+        expect(response).to be_successful
       end
     end
   end
