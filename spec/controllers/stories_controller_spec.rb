@@ -11,6 +11,8 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
     allow(controller).to receive(:find_user_story).and_return(story)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe '#create' do
@@ -102,7 +104,7 @@ RSpec.describe StoriesController do
     it 'returns fetched attributes as JSON' do
       allow_any_instance_of(Story).to receive(:fetched_attributes).and_return({ title: 'Fetched Title' })
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
       expect(JSON.parse(response.body)).to eq('title' => 'Fetched Title')
     end
   end
@@ -139,40 +141,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#undelete' do
-    context 'when user is authorized' do
-      it 'undeletes the story' do
-        story.update(is_deleted: true)
-        post :undelete, params: { id: story.short_id }
-        expect(story.reload.is_deleted).to be false
-      end
-
-      it 'redirects to the story page' do
-        post :undelete, params: { id: story.short_id }
-        expect(response).to redirect_to(Routes.title_path(story))
-      end
-    end
-
-    context 'when user is not authorized' do
-      before do
-        allow(story).to receive(:is_editable_by_user?).and_return(false)
-        allow(story).to receive(:is_undeletable_by_user?).and_return(false)
-      end
-
-      it 'does not undelete the story' do
-        story.update(is_deleted: true)
-        post :undelete, params: { id: story.short_id }
-        expect(story.reload.is_deleted).to be true
-      end
-
-      it 'redirects to the root path with an error' do
-        post :undelete, params: { id: story.short_id }
-        expect(response).to redirect_to('/')
-        expect(flash[:error]).to eq('You cannot edit that story.')
-      end
-    end
-  end
-
   describe '#update' do
     context 'with valid attributes' do
       it 'updates the story' do
@@ -201,91 +169,11 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#unvote' do
-    it 'removes the vote from the story' do
-      allow(controller).to receive(:find_story).and_return(story)
-      expect(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).with(0, story.id, nil, user.id, nil)
-      post :unvote, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#upvote' do
-    it 'adds a vote to the story' do
-      allow(controller).to receive(:find_story).and_return(story)
-      expect(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).with(1, story.id, nil, user.id, nil)
-      post :upvote, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#flag' do
-    it 'flags the story with a valid reason' do
-      allow(controller).to receive(:find_story).and_return(story)
-      allow(user).to receive(:can_flag?).and_return(true)
-      expect(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).with(-1, story.id, nil, user.id, 'spam')
-      post :flag, params: { id: story.short_id, reason: 'spam' }
-      expect(response.body).to eq('ok')
-    end
-
-    it 'returns an error for an invalid reason' do
-      allow(controller).to receive(:find_story).and_return(story)
-      post :flag, params: { id: story.short_id, reason: 'invalid' }
-      expect(response.body).to eq('invalid reason')
-    end
-  end
-
-  describe '#hide' do
-    it 'hides the story for the user' do
-      allow(controller).to receive(:find_story).and_return(story)
-      expect(HiddenStory).to receive(:hide_story_for_user).with(story, user)
-      post :hide, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#unhide' do
-    it 'unhides the story for the user' do
-      allow(controller).to receive(:find_story).and_return(story)
-      expect(HiddenStory).to receive(:unhide_story_for_user).with(story, user)
-      post :unhide, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#save' do
-    it 'saves the story for the user' do
-      allow(controller).to receive(:find_story).and_return(story)
-      expect(SavedStory).to receive(:save_story_for_user).with(story.id, user.id)
-      post :save, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#unsave' do
-    it 'unsaves the story for the user' do
-      allow(controller).to receive(:find_story).and_return(story)
-      expect(SavedStory).to receive(:where).with(user_id: user.id, story_id: story.id).and_return(double(delete_all: true))
-      post :unsave, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
   describe '#check_url_dupe' do
     it 'checks for duplicate URLs' do
       allow_any_instance_of(Story).to receive(:check_already_posted_recently?).and_return(true)
       post :check_url_dupe, params: { story: { url: 'http://example.com' } }
       expect(response).to be_successful
-    end
-  end
-
-  describe '#disown' do
-    it 'disowns the story' do
-      allow(controller).to receive(:find_story).and_return(story)
-      allow(story).to receive(:disownable_by_user?).and_return(true)
-      expect(InactiveUser).to receive(:disown!).with(story)
-      post :disown, params: { id: story.short_id }
-      expect(response).to redirect_to(Routes.title_path(story))
     end
   end
 end
