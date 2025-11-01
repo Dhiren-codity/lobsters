@@ -118,6 +118,4 @@ RSpec.describe StoriesController do
       expect(response.content_type).to eq('text/html; charset=utf-8')
     end
   end
-
-  # Removed: Tests for routes that do not exist
 end
