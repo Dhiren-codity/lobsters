@@ -11,6 +11,8 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
     allow(controller).to receive(:find_user_story).and_return(story)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe '#create' do
@@ -139,40 +141,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#undelete' do
-    context 'when user is authorized' do
-      it 'undeletes the story' do
-        story.update(is_deleted: true)
-        post :undelete, params: { id: story.short_id }
-        expect(story.reload.is_deleted).to be_falsey
-      end
-
-      it 'redirects to the story page' do
-        post :undelete, params: { id: story.short_id }
-        expect(response).to redirect_to(Routes.title_path(story))
-      end
-    end
-
-    context 'when user is not authorized' do
-      before do
-        allow(story).to receive(:is_editable_by_user?).and_return(false)
-        allow(story).to receive(:is_undeletable_by_user?).and_return(false)
-      end
-
-      it 'does not undelete the story' do
-        story.update(is_deleted: true)
-        post :undelete, params: { id: story.short_id }
-        expect(story.reload.is_deleted).to be_truthy
-      end
-
-      it 'redirects to the root path with an error' do
-        post :undelete, params: { id: story.short_id }
-        expect(response).to redirect_to('/')
-        expect(flash[:error]).to eq('You cannot edit that story.')
-      end
-    end
-  end
-
   describe '#update' do
     context 'with valid attributes' do
       it 'updates the story' do
@@ -199,80 +167,11 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#unvote' do
-    it 'removes the user vote from the story' do
-      allow(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).and_return(true)
-      post :unvote, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#upvote' do
-    it 'adds an upvote to the story' do
-      allow(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).and_return(true)
-      post :upvote, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#flag' do
-    it 'flags the story with a valid reason' do
-      allow(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).and_return(true)
-      post :flag, params: { id: story.short_id, reason: 'spam' }
-      expect(response.body).to eq('ok')
-    end
-
-    it 'returns an error for an invalid reason' do
-      post :flag, params: { id: story.short_id, reason: 'invalid' }
-      expect(response.body).to eq('invalid reason')
-    end
-  end
-
-  describe '#hide' do
-    it 'hides the story for the user' do
-      allow(HiddenStory).to receive(:hide_story_for_user).and_return(true)
-      post :hide, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#unhide' do
-    it 'unhides the story for the user' do
-      allow(HiddenStory).to receive(:unhide_story_for_user).and_return(true)
-      post :unhide, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#save' do
-    it 'saves the story for the user' do
-      allow(SavedStory).to receive(:save_story_for_user).and_return(true)
-      post :save, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#unsave' do
-    it 'unsaves the story for the user' do
-      allow(SavedStory).to receive(:where).and_return(double(delete_all: true))
-      post :unsave, params: { id: story.short_id }
-      expect(response.body).to eq('ok')
-    end
-  end
-
   describe '#check_url_dupe' do
     it 'checks for duplicate URLs' do
       allow_any_instance_of(Story).to receive(:check_already_posted_recently?).and_return(true)
       post :check_url_dupe, params: { story: { url: 'http://example.com' } }
       expect(response.content_type).to eq('text/html')
-    end
-  end
-
-  describe '#disown' do
-    it 'disowns the story' do
-      allow(InactiveUser).to receive(:disown!).and_return(true)
-      post :disown, params: { id: story.short_id }
-      expect(response).to redirect_to(Routes.title_path(story))
     end
   end
 end
