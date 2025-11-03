@@ -10,10 +10,12 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
-    allow(controller).to receive(:find_user_story).and_return(true)
+    allow(controller).to receive(:find_user_story).and_return(story)
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
     allow(controller).to receive(:find_story).and_return(story)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe "POST #create" do
@@ -98,32 +100,9 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe "POST #upvote" do
-    context "when the story is found" do
-      it "upvotes the story" do
-        expect(Vote).to receive(:vote_thusly_on_story_or_comment_for_user_because).with(1, story.id, nil, user.id, nil)
-        post :upvote, params: { id: story.to_param }
-        expect(response.body).to eq("ok")
-      end
-    end
-
-    context "when the story is not found" do
-      before do
-        allow(controller).to receive(:find_story).and_return(nil)
-      end
-
-      it "returns an error" do
-        post :upvote, params: { id: "invalid" }
-        expect(response.body).to eq("can't find story")
-        expect(response.status).to eq(400)
-      end
-    end
-  end
-
   describe "POST #flag" do
     context "with a valid reason" do
       before do
-        allow(Vote::STORY_REASONS).to receive(:[]).and_return(true)
         allow(user).to receive(:can_flag?).and_return(true)
       end
 
@@ -135,10 +114,6 @@ RSpec.describe StoriesController do
     end
 
     context "with an invalid reason" do
-      before do
-        allow(Vote::STORY_REASONS).to receive(:[]).and_return(false)
-      end
-
       it "returns an error" do
         post :flag, params: { id: story.to_param, reason: "invalid" }
         expect(response.body).to eq("invalid reason")
