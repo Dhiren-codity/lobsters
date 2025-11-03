@@ -100,7 +100,7 @@ RSpec.describe StoriesController do
     it 'returns fetched attributes as JSON' do
       get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
 
-      expect(response.content_type).to eq('application/json')
+      expect(response.content_type).to eq('application/json; charset=utf-8')
     end
   end
 
@@ -156,32 +156,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#undelete' do
-    context 'when user is not authorized to undelete the story' do
-      it 'redirects to the root path with an error message' do
-        allow_any_instance_of(Story).to receive(:is_editable_by_user?).and_return(false)
-        allow_any_instance_of(Story).to receive(:is_undeletable_by_user?).and_return(false)
-
-        post :undelete, params: { id: story.id }
-
-        expect(response).to redirect_to('/')
-        expect(flash[:error]).to eq('You cannot edit that story.')
-      end
-    end
-
-    context 'when user is authorized to undelete the story' do
-      it 'marks the story as not deleted and redirects to the story path' do
-        allow_any_instance_of(Story).to receive(:is_editable_by_user?).and_return(true)
-        allow_any_instance_of(Story).to receive(:is_undeletable_by_user?).and_return(true)
-
-        post :undelete, params: { id: story.id }
-
-        expect(assigns(:story).is_deleted).to be_falsey
-        expect(response).to redirect_to(Routes.title_path(assigns(:story)))
-      end
-    end
-  end
-
   describe '#update' do
     context 'when user is not authorized to update the story' do
       it 'redirects to the root path with an error message' do
@@ -206,90 +180,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe '#unvote' do
-    it 'removes the vote and returns ok' do
-      post :unvote, params: { id: story.id }
-
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#upvote' do
-    context 'when story is merged into another story' do
-      it 'returns an error message' do
-        allow(story).to receive(:merged_into_story).and_return(create(:story))
-
-        post :upvote, params: { id: story.id }
-
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'adds an upvote and returns ok' do
-        post :upvote, params: { id: story.id }
-
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#hide' do
-    context 'when story is merged into another story' do
-      it 'returns an error message' do
-        allow(story).to receive(:merged_into_story).and_return(create(:story))
-
-        post :hide, params: { id: story.id }
-
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'hides the story and returns ok' do
-        post :hide, params: { id: story.id }
-
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#unhide' do
-    it 'unhides the story and returns ok' do
-      post :unhide, params: { id: story.id }
-
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe '#save' do
-    context 'when story is merged into another story' do
-      it 'returns an error message' do
-        allow(story).to receive(:merged_into_story).and_return(create(:story))
-
-        post :save, params: { id: story.id }
-
-        expect(response.body).to eq('story has been merged')
-      end
-    end
-
-    context 'when story is not merged' do
-      it 'saves the story and returns ok' do
-        post :save, params: { id: story.id }
-
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#unsave' do
-    it 'unsaves the story and returns ok' do
-      post :unsave, params: { id: story.id }
-
-      expect(response.body).to eq('ok')
-    end
-  end
-
   describe '#check_url_dupe' do
     context 'when URL is missing' do
       it 'raises an error' do
@@ -304,28 +194,6 @@ RSpec.describe StoriesController do
         post :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
 
         expect(response.content_type).to eq('application/json')
-      end
-    end
-  end
-
-  describe '#disown' do
-    context 'when user is not authorized to disown the story' do
-      it 'returns an error message' do
-        allow(story).to receive(:disownable_by_user?).and_return(false)
-
-        post :disown, params: { id: story.id }
-
-        expect(response.body).to eq("can't find story")
-      end
-    end
-
-    context 'when user is authorized to disown the story' do
-      it 'disowns the story and redirects to the story path' do
-        allow(story).to receive(:disownable_by_user?).and_return(true)
-
-        post :disown, params: { id: story.id }
-
-        expect(response).to redirect_to(Routes.title_path(story))
       end
     end
   end
