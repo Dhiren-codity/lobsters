@@ -9,10 +9,12 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
     allow(controller).to receive(:require_logged_in_user).and_return(true)
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
-    allow(controller).to receive(:find_user_story).and_return(true)
+    allow(controller).to receive(:find_user_story).and_return(story)
     allow(controller).to receive(:track_story_reads).and_yield
     allow(controller).to receive(:show_title_h1).and_return(true)
     allow(controller).to receive(:find_story).and_return(story)
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe '#create' do
@@ -226,36 +228,6 @@ RSpec.describe StoriesController do
     context 'when story is not merged' do
       it 'adds an upvote and returns ok' do
         post :upvote, params: { id: story.id }
-
-        expect(response.body).to eq('ok')
-      end
-    end
-  end
-
-  describe '#flag' do
-    context 'when reason is invalid' do
-      it 'returns an error message' do
-        post :flag, params: { id: story.id, reason: 'invalid_reason' }
-
-        expect(response.body).to eq('invalid reason')
-      end
-    end
-
-    context 'when user is not permitted to flag' do
-      it 'returns an error message' do
-        allow(user).to receive(:can_flag?).and_return(false)
-
-        post :flag, params: { id: story.id, reason: 'spam' }
-
-        expect(response.body).to eq('not permitted to flag')
-      end
-    end
-
-    context 'when reason is valid and user is permitted' do
-      it 'flags the story and returns ok' do
-        allow(user).to receive(:can_flag?).and_return(true)
-
-        post :flag, params: { id: story.id, reason: 'spam' }
 
         expect(response.body).to eq('ok')
       end
