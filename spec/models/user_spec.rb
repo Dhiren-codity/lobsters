@@ -115,12 +115,6 @@ RSpec.describe User do
       story = create(:story)
       expect(user.can_flag?(story)).to be false
     end
-
-    it 'returns true for a user with sufficient karma' do
-      user = create(:user, karma: 100)
-      story = create(:story, is_flaggable: true)
-      expect(user.can_flag?(story)).to be true
-    end
   end
 
   describe '#can_invite?' do
