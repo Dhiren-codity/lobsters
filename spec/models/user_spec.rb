@@ -1,9 +1,9 @@
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe User do
-  describe '#as_json' do
-    it 'returns the correct JSON representation for a non-admin user' do
-      user = create(:user, is_admin: false, github_username: 'github_user', mastodon_username: 'mastodon_user')
+  describe "#as_json" do
+    it "returns the correct JSON representation for a non-admin user" do
+      user = create(:user, is_admin: false, github_username: "github_user", mastodon_username: "mastodon_user")
       json = user.as_json
 
       expect(json[:username]).to eq(user.username)
@@ -14,11 +14,11 @@ RSpec.describe User do
       expect(json[:about]).to eq(user.linkified_about)
       expect(json[:avatar_url]).to eq(user.avatar_url)
       expect(json[:invited_by_user]).to eq(user.invited_by_user&.username)
-      expect(json[:github_username]).to eq('github_user')
-      expect(json[:mastodon_username]).to eq('mastodon_user')
+      expect(json[:github_username]).to eq("github_user")
+      expect(json[:mastodon_username]).to eq("mastodon_user")
     end
 
-    it 'returns the correct JSON representation for an admin user' do
+    it "returns the correct JSON representation for an admin user" do
       user = create(:user, is_admin: true)
       json = user.as_json
 
@@ -29,40 +29,40 @@ RSpec.describe User do
     end
   end
 
-  describe '#authenticate_totp' do
-    it 'authenticates with a valid TOTP code' do
-      user = create(:user, totp_secret: 'base32secret3232')
+  describe "#authenticate_totp" do
+    it "authenticates with a valid TOTP code" do
+      user = create(:user, totp_secret: "base32secret3232")
       totp = ROTP::TOTP.new(user.totp_secret)
       code = totp.now
 
       expect(user.authenticate_totp(code)).to be_truthy
     end
 
-    it 'fails to authenticate with an invalid TOTP code' do
-      user = create(:user, totp_secret: 'base32secret3232')
-      expect(user.authenticate_totp('123456')).to be_falsey
+    it "fails to authenticate with an invalid TOTP code" do
+      user = create(:user, totp_secret: "base32secret3232")
+      expect(user.authenticate_totp("123456")).to be_falsey
     end
   end
 
-  describe '#avatar_path' do
-    it 'returns the correct avatar path' do
-      user = create(:user, username: 'testuser')
-      expect(user.avatar_path).to eq('/avatars/testuser-100.png')
+  describe "#avatar_path" do
+    it "returns the correct avatar path" do
+      user = create(:user, username: "testuser")
+      expect(user.avatar_path).to eq("/avatars/testuser-100.png")
     end
   end
 
-  describe '#avatar_url' do
-    it 'returns the correct avatar URL' do
-      user = create(:user, username: 'testuser')
-      expect(user.avatar_url).to eq(ActionController::Base.helpers.image_url('/avatars/testuser-100.png', skip_pipeline: true))
+  describe "#avatar_url" do
+    it "returns the correct avatar URL" do
+      user = create(:user, username: "testuser")
+      expect(user.avatar_url).to eq(ActionController::Base.helpers.image_url("/avatars/testuser-100.png", skip_pipeline: true))
     end
   end
 
-  describe '#disable_invite_by_user_for_reason!' do
-    it 'disables invite privileges and creates a moderation record' do
+  describe "#disable_invite_by_user_for_reason!" do
+    it "disables invite privileges and creates a moderation record" do
       user = create(:user)
       disabler = create(:user)
-      reason = 'Violation of terms'
+      reason = "Violation of terms"
 
       expect {
         user.disable_invite_by_user_for_reason!(disabler, reason)
@@ -74,16 +74,16 @@ RSpec.describe User do
       moderation = Moderation.last
       expect(moderation.moderator_user_id).to eq(disabler.id)
       expect(moderation.user_id).to eq(user.id)
-      expect(moderation.action).to eq('Disabled invitations')
+      expect(moderation.action).to eq("Disabled invitations")
       expect(moderation.reason).to eq(reason)
     end
   end
 
-  describe '#ban_by_user_for_reason!' do
-    it 'bans the user and creates a moderation record' do
+  describe "#ban_by_user_for_reason!" do
+    it "bans the user and creates a moderation record" do
       user = create(:user)
       banner = create(:user)
-      reason = 'Spamming'
+      reason = "Spamming"
 
       expect {
         user.ban_by_user_for_reason!(banner, reason)
@@ -95,87 +95,87 @@ RSpec.describe User do
       moderation = Moderation.last
       expect(moderation.moderator_user_id).to eq(banner.id)
       expect(moderation.user_id).to eq(user.id)
-      expect(moderation.action).to eq('Banned')
+      expect(moderation.action).to eq("Banned")
       expect(moderation.reason).to eq(reason)
     end
   end
 
-  describe '#banned_from_inviting?' do
-    it 'returns true if the user is banned from inviting' do
+  describe "#banned_from_inviting?" do
+    it "returns true if the user is banned from inviting" do
       user = create(:user, disabled_invite_at: Time.current)
       expect(user.banned_from_inviting?).to be true
     end
 
-    it 'returns false if the user is not banned from inviting' do
+    it "returns false if the user is not banned from inviting" do
       user = create(:user, disabled_invite_at: nil)
       expect(user.banned_from_inviting?).to be false
     end
   end
 
-  describe '#can_flag?' do
-    it 'returns false for new users' do
+  describe "#can_flag?" do
+    it "returns false for new users" do
       user = create(:user, created_at: Time.current)
       story = create(:story)
       expect(user.can_flag?(story)).to be false
     end
 
-    it 'returns true for users with sufficient karma' do
+    it "returns true for users with sufficient karma" do
       user = create(:user, karma: 100)
       comment = create(:comment)
       expect(user.can_flag?(comment)).to be true
     end
   end
 
-  describe '#can_invite?' do
-    it 'returns false if the user is banned from inviting' do
+  describe "#can_invite?" do
+    it "returns false if the user is banned from inviting" do
       user = create(:user, disabled_invite_at: Time.current)
       expect(user.can_invite?).to be false
     end
 
-    it 'returns true if the user can submit stories' do
+    it "returns true if the user can submit stories" do
       user = create(:user, karma: 10)
       expect(user.can_invite?).to be true
     end
   end
 
-  describe '#can_offer_suggestions?' do
-    it 'returns false for new users' do
+  describe "#can_offer_suggestions?" do
+    it "returns false for new users" do
       user = create(:user, created_at: Time.current)
       expect(user.can_offer_suggestions?).to be false
     end
 
-    it 'returns true for users with sufficient karma' do
+    it "returns true for users with sufficient karma" do
       user = create(:user, karma: 20)
       expect(user.can_offer_suggestions?).to be true
     end
   end
 
-  describe '#can_see_invitation_requests?' do
-    it 'returns true for moderators' do
+  describe "#can_see_invitation_requests?" do
+    it "returns true for moderators" do
       user = create(:user, is_moderator: true)
       expect(user.can_see_invitation_requests?).to be true
     end
 
-    it 'returns true for users with sufficient karma' do
+    it "returns true for users with sufficient karma" do
       user = create(:user, karma: 60)
       expect(user.can_see_invitation_requests?).to be true
     end
   end
 
-  describe '#can_submit_stories?' do
-    it 'returns true for users with sufficient karma' do
+  describe "#can_submit_stories?" do
+    it "returns true for users with sufficient karma" do
       user = create(:user, karma: 0)
       expect(user.can_submit_stories?).to be true
     end
 
-    it 'returns false for users with insufficient karma' do
+    it "returns false for users with insufficient karma" do
       user = create(:user, karma: -5)
       expect(user.can_submit_stories?).to be false
     end
   end
 
-  describe '#check_session_token' do
-    it 'rolls a new session token if blank' do
+  describe "#check_session_token" do
+    it "rolls a new session token if blank" do
       user = create(:user, session_token: nil)
       expect { user.check_session_token }.to change { user.session_token }.from(nil)
     end
