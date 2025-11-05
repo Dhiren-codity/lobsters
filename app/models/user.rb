@@ -188,6 +188,9 @@ class User < ApplicationRecord
   # minimum number of submitted stories before checking self promotion
   MIN_STORIES_CHECK_SELF_PROMOTION = 2
 
+  # karma threshold to be considered a high karma user
+  HIGH_KARMA_THRESHOLD = 100
+
   def underscores_and_dashes_in_username
     username_regex = "^" + username.gsub(/_|-/, "[-_]") + "$"
     return unless username_regex.include?("[-_]")
@@ -340,6 +343,10 @@ class User < ApplicationRecord
 
   def can_submit_stories?
     karma >= MIN_KARMA_TO_SUBMIT_STORIES
+  end
+
+  def high_karma?
+    karma >= HIGH_KARMA_THRESHOLD
   end
 
   def check_session_token
