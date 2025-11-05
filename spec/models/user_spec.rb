@@ -115,13 +115,13 @@ RSpec.describe User do
   describe '#can_flag?' do
     it 'returns false for new users' do
       user = create(:user, created_at: Time.current)
-      story = create(:story, is_flaggable: true)
+      story = create(:story)
       expect(user.can_flag?(story)).to be false
     end
 
     it 'returns true for users with sufficient karma' do
       user = create(:user, karma: 100)
-      comment = create(:comment, is_flaggable: true)
+      comment = create(:comment)
       expect(user.can_flag?(comment)).to be true
     end
   end
