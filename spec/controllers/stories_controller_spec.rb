@@ -43,12 +43,4 @@ RSpec.describe StoriesController do
     end
   end
 
-  # Removed: Tests for #upvote could not be fixed (missing route)
-  # Removed: Tests for #unvote could not be fixed (missing route)
-  # Removed: Tests for #hide could not be fixed (missing route)
-  # Removed: Tests for #unhide could not be fixed (missing route)
-  # Removed: Tests for #save could not be fixed (missing route)
-  # Removed: Tests for #unsave could not be fixed (missing route)
-
-  # Removed: Tests for #flag could not be fixed (missing route)
 end
