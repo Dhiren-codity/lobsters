@@ -12,6 +12,8 @@ RSpec.describe StoriesController do
     allow(controller).to receive(:verify_user_can_submit_stories).and_return(true)
     allow(controller).to receive(:find_user_story).and_return(story)
     allow(controller).to receive(:track_story_reads).and_yield
+    controller.instance_variable_set(:@user, user)
+    controller.instance_variable_set(:@story, story)
   end
 
   describe 'POST #create' do
@@ -88,7 +90,7 @@ RSpec.describe StoriesController do
 
   describe 'GET #fetch_url_attributes' do
     it 'returns fetched attributes as JSON' do
-      get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }
+      get :fetch_url_attributes, params: { fetch_url: 'http://example.com' }, format: :json
       expect(response.content_type).to eq('application/json')
     end
   end
@@ -213,7 +215,7 @@ RSpec.describe StoriesController do
 
   describe 'GET #check_url_dupe' do
     it 'checks for duplicate URLs and returns JSON' do
-      get :check_url_dupe, params: { story: { url: 'http://example.com' } }
+      get :check_url_dupe, params: { story: { url: 'http://example.com' } }, format: :json
       expect(response.content_type).to eq('application/json')
     end
   end
