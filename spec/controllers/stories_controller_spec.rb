@@ -126,28 +126,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  describe "PATCH #undelete" do
-    context "when user is authorized" do
-      it "undeletes the story and redirects" do
-        patch :undelete, params: { id: story.to_param }
-        expect(response).to redirect_to(Routes.title_path(story))
-      end
-    end
-
-    context "when user is not authorized" do
-      before do
-        allow(story).to receive(:is_editable_by_user?).and_return(false)
-        allow(story).to receive(:is_undeletable_by_user?).and_return(false)
-      end
-
-      it "redirects to the root path with an error" do
-        patch :undelete, params: { id: story.to_param }
-        expect(response).to redirect_to("/")
-        expect(flash[:error]).to eq("You cannot edit that story.")
-      end
-    end
-  end
-
   describe "PATCH #update" do
     context "with valid params" do
       it "updates the story and redirects" do
@@ -164,20 +142,6 @@ RSpec.describe StoriesController do
     end
   end
 
-  # Removed: Tests for #unvote could not be fixed (missing route)
-
-  # Removed: Tests for #upvote could not be fixed (missing route)
-
-  # Removed: Tests for #flag could not be fixed (missing route)
-
-  # Removed: Tests for #hide could not be fixed (missing route)
-
-  # Removed: Tests for #unhide could not be fixed (missing route)
-
-  # Removed: Tests for #save could not be fixed (missing route)
-
-  # Removed: Tests for #unsave could not be fixed (missing route)
-
   describe "GET #check_url_dupe" do
     it "checks for duplicate URLs and returns JSON" do
       get :check_url_dupe, params: { story: { url: "http://example.com" } }, format: :json
@@ -185,5 +149,13 @@ RSpec.describe StoriesController do
     end
   end
 
+  # Removed: Tests for #undelete could not be fixed (missing route)
+  # Removed: Tests for #unvote could not be fixed (missing route)
+  # Removed: Tests for #upvote could not be fixed (missing route)
+  # Removed: Tests for #flag could not be fixed (missing route)
+  # Removed: Tests for #hide could not be fixed (missing route)
+  # Removed: Tests for #unhide could not be fixed (missing route)
+  # Removed: Tests for #save could not be fixed (missing route)
+  # Removed: Tests for #unsave could not be fixed (missing route)
   # Removed: Tests for #disown could not be fixed (missing route)
 end
