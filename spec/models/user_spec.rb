@@ -1,9 +1,9 @@
-require 'rails_helper'
+require "rails_helper"
 
 RSpec.describe User do
-  describe '#as_json' do
-    it 'returns the correct JSON representation for a non-admin user' do
-      user = create(:user, is_admin: false, github_username: 'github_user', mastodon_username: 'mastodon_user')
+  describe "#as_json" do
+    it "returns the correct JSON representation for a non-admin user" do
+      user = create(:user, is_admin: false, github_username: "github_user", mastodon_username: "mastodon_user")
       json = user.as_json
 
       expect(json[:username]).to eq(user.username)
@@ -11,11 +11,11 @@ RSpec.describe User do
       expect(json[:is_admin]).to eq(false)
       expect(json[:karma]).to eq(user.karma)
       expect(json[:homepage]).to eq(user.homepage)
-      expect(json[:github_username]).to eq('github_user')
-      expect(json[:mastodon_username]).to eq('mastodon_user')
+      expect(json[:github_username]).to eq("github_user")
+      expect(json[:mastodon_username]).to eq("mastodon_user")
     end
 
-    it 'returns the correct JSON representation for an admin user' do
+    it "returns the correct JSON representation for an admin user" do
       user = create(:user, is_admin: true)
       json = user.as_json
 
@@ -26,40 +26,40 @@ RSpec.describe User do
     end
   end
 
-  describe '#authenticate_totp' do
-    it 'authenticates with a valid TOTP code' do
-      user = create(:user, totp_secret: 'base32secret3232')
+  describe "#authenticate_totp" do
+    it "authenticates with a valid TOTP code" do
+      user = create(:user, totp_secret: "base32secret3232")
       totp = ROTP::TOTP.new(user.totp_secret)
       code = totp.now
 
       expect(user.authenticate_totp(code)).to be_truthy
     end
 
-    it 'fails to authenticate with an invalid TOTP code' do
-      user = create(:user, totp_secret: 'base32secret3232')
-      expect(user.authenticate_totp('123456')).to be_falsey
+    it "fails to authenticate with an invalid TOTP code" do
+      user = create(:user, totp_secret: "base32secret3232")
+      expect(user.authenticate_totp("123456")).to be_falsey
     end
   end
 
-  describe '#avatar_path' do
-    it 'returns the correct avatar path' do
-      user = create(:user, username: 'testuser')
-      expect(user.avatar_path).to eq('/avatars/testuser-100.png')
+  describe "#avatar_path" do
+    it "returns the correct avatar path" do
+      user = create(:user, username: "testuser")
+      expect(user.avatar_path).to eq("/avatars/testuser-100.png")
     end
   end
 
-  describe '#avatar_url' do
-    it 'returns the correct avatar URL' do
-      user = create(:user, username: 'testuser')
-      expect(user.avatar_url).to eq(ActionController::Base.helpers.image_url('/avatars/testuser-100.png', skip_pipeline: true))
+  describe "#avatar_url" do
+    it "returns the correct avatar URL" do
+      user = create(:user, username: "testuser")
+      expect(user.avatar_url).to eq(ActionController::Base.helpers.image_url("/avatars/testuser-100.png", skip_pipeline: true))
     end
   end
 
-  describe '#disable_invite_by_user_for_reason!' do
-    it 'disables invite privileges and logs the action' do
+  describe "#disable_invite_by_user_for_reason!" do
+    it "disables invite privileges and logs the action" do
       user = create(:user)
       disabler = create(:user)
-      reason = 'Violation of terms'
+      reason = "Violation of terms"
 
       expect {
         user.disable_invite_by_user_for_reason!(disabler, reason)
@@ -71,11 +71,11 @@ RSpec.describe User do
     end
   end
 
-  describe '#ban_by_user_for_reason!' do
-    it 'bans the user and logs the action' do
+  describe "#ban_by_user_for_reason!" do
+    it "bans the user and logs the action" do
       user = create(:user)
       banner = create(:user)
-      reason = 'Spamming'
+      reason = "Spamming"
 
       expect {
         user.ban_by_user_for_reason!(banner, reason)
@@ -87,78 +87,76 @@ RSpec.describe User do
     end
   end
 
-  describe '#banned_from_inviting?' do
-    it 'returns true if the user is banned from inviting' do
+  describe "#banned_from_inviting?" do
+    it "returns true if the user is banned from inviting" do
       user = create(:user, disabled_invite_at: Time.current)
       expect(user.banned_from_inviting?).to be true
     end
 
-    it 'returns false if the user is not banned from inviting' do
+    it "returns false if the user is not banned from inviting" do
       user = create(:user, disabled_invite_at: nil)
       expect(user.banned_from_inviting?).to be false
     end
   end
 
-  describe '#can_flag?' do
-    it 'returns false for new users' do
+  describe "#can_flag?" do
+    it "returns false for new users" do
       user = create(:user, created_at: Time.current)
       story = create(:story)
       expect(user.can_flag?(story)).to be false
     end
-
-    # Removed: Test for non-existent method 'is_flaggable='
   end
 
-  describe '#can_invite?' do
-    it 'returns true if the user can invite' do
+  describe "#can_invite?" do
+    it "returns true if the user can invite" do
       user = create(:user, karma: 10)
       expect(user.can_invite?).to be true
     end
 
-    it 'returns false if the user is banned from inviting' do
+    it "returns false if the user is banned from inviting" do
       user = create(:user, disabled_invite_at: Time.current)
       expect(user.can_invite?).to be false
     end
   end
 
-  describe '#can_offer_suggestions?' do
-    it 'returns true if the user can offer suggestions' do
+  describe "#can_offer_suggestions?" do
+    it "returns true if the user can offer suggestions" do
       user = create(:user, karma: 20)
       expect(user.can_offer_suggestions?).to be true
     end
 
-    it 'returns false if the user is new' do
+    it "returns false if the user is new" do
       user = create(:user, created_at: Time.current)
       expect(user.can_offer_suggestions?).to be false
     end
   end
 
-  describe '#can_see_invitation_requests?' do
-    it 'returns true if the user can see invitation requests' do
+  describe "#can_see_invitation_requests?" do
+    it "returns true if the user can see invitation requests" do
       user = create(:user, karma: 60)
       expect(user.can_see_invitation_requests?).to be true
     end
 
-    it 'returns false if the user cannot invite' do
+    it "returns false if the user cannot invite" do
       user = create(:user, disabled_invite_at: Time.current)
       expect(user.can_see_invitation_requests?).to be false
     end
   end
 
-  describe '#can_submit_stories?' do
-    it 'returns true if the user can submit stories' do
+  describe "#can_submit_stories?" do
+    it "returns true if the user can submit stories" do
       user = create(:user, karma: 5)
       expect(user.can_submit_stories?).to be true
     end
 
-    it 'returns false if the user has insufficient karma' do
+    it "returns false if the user has insufficient karma" do
       user = create(:user, karma: -5)
       expect(user.can_submit_stories?).to be false
     end
   end
 
-  describe '#check_session_token' do
-    it 'generates a session token if none exists' do
+  describe "#check_session_token" do
+    it "generates a session token if none exists" do
       user = create(:user, session_token: nil)
       user.check_session_token
       expect(user.session_token).not_to be_nil
