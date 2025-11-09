@@ -287,7 +287,7 @@ func (ms *MetadataService) handleFetch(w http.ResponseWriter, r *http.Request) {
 func (ms *MetadataService) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
-		"status": "healthy",
+		"status":  "healthy",
 		"service": "metadata-service",
 	})
 }
@@ -343,4 +343,3 @@ func main() {
 
 	log.Println("Server exited")
 }
-
