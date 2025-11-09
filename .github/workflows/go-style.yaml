@@ -1,0 +1,90 @@
+name: Code Style
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+jobs:
+  gofmt:
+    name: check gofmt
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version-file: "go.mod"
+          check-latest: true
+
+      - uses: chainguard-dev/actions/gofmt@d886686603afb809f7ef9b734b333e20b7ce5cda
+        with:
+          args: -s
+
+  goimports:
+    name: check goimports
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version-file: "go.mod"
+          check-latest: true
+
+      - uses: chainguard-dev/actions/goimports@d886686603afb809f7ef9b734b333e20b7ce5cda
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+
+      - name: Set up Go
+        uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
+        with:
+          go-version-file: "go.mod"
+          check-latest: true
+
+      - uses: chainguard-dev/actions/trailing-space@d886686603afb809f7ef9b734b333e20b7ce5cda
+        if: ${{ always() }}
+
+      - uses: chainguard-dev/actions/eof-newline@d886686603afb809f7ef9b734b333e20b7ce5cda
+        if: ${{ always() }}
+
+      - uses: reviewdog/action-misspell@18ffb61effb93b47e332f185216be7e49592e7e1 # v1.26.1
+        if: ${{ always() }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          fail_level: warning
+          locale: "US"
+          exclude: |
+            ./.golangci.yaml
+
+      - uses: get-woke/woke-action-reviewdog@d71fd0115146a01c3181439ce714e21a69d75e31 # v0
+        if: ${{ always() }}
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-check
+          level: error
+          fail-on-error: true
