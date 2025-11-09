@@ -21,10 +21,11 @@ jobs:
 
       - uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
         with:
-          go-version-file: "go.mod"
+          go-version-file: "services/metadata-service/go.mod"
           check-latest: true
 
       - name: Verify
+        working-directory: services/metadata-service
         run: |
           if [ -f "./hack/presubmit.sh" ]; then
             ./hack/presubmit.sh
@@ -46,10 +47,11 @@ jobs:
 
       - uses: actions/setup-go@3041bf56c941b39c61721a86cd11f3bb1338122a # v5.2.0
         with:
-          go-version-file: "go.mod"
+          go-version-file: "services/metadata-service/go.mod"
           check-latest: true
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@1481404843c368bc19ca9406f87d6e0fc97bdcfd # v7.0.0
         with:
           version: v2.0
+          working-directory: services/metadata-service
