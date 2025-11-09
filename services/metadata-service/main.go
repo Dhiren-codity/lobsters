@@ -19,7 +19,6 @@ import (
 type MetadataService struct {
 	cache      *Cache
 	httpClient *http.Client
-	mu         sync.RWMutex
 }
 
 type Cache struct {
@@ -122,7 +121,11 @@ func (ms *MetadataService) fetchMetadata(ctx context.Context, url string) (*URLM
 			Error: fmt.Sprintf("failed to fetch: %v", err),
 		}, nil
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			log.Printf("Error closing response body: %v", err)
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return &URLMetadata{
@@ -260,10 +263,13 @@ func (ms *MetadataService) handleFetch(w http.ResponseWriter, r *http.Request) {
 
 	cached, found := ms.cache.Get(req.URL)
 	if found {
-		json.NewEncoder(w).Encode(FetchResponse{
+		if err := json.NewEncoder(w).Encode(FetchResponse{
 			Metadata: cached,
 			Cached:   true,
-		})
+		}); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to encode response: %v", err), http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 
@@ -278,18 +284,23 @@ func (ms *MetadataService) handleFetch(w http.ResponseWriter, r *http.Request) {
 
 	ms.cache.Set(req.URL, metadata, 24*time.Hour)
 
-	json.NewEncoder(w).Encode(FetchResponse{
+	if err := json.NewEncoder(w).Encode(FetchResponse{
 		Metadata: metadata,
 		Cached:   false,
-	})
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to encode response: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
 
 func (ms *MetadataService) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"status":  "healthy",
 		"service": "metadata-service",
-	})
+	}); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to encode response: %v", err), http.StatusInternalServerError)
+	}
 }
 
 func (ms *MetadataService) startCacheCleanup() {
