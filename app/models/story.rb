@@ -1196,6 +1196,23 @@ class Story < ApplicationRecord
     # security: do not connect to arbitrary user-submitted ports
     return @fetched_attributes if @url_port
 
+    # Try Go metadata service first if enabled
+    if use_metadata_service?
+      begin
+        client = MetadataServiceClient.new
+        metadata = client.fetch_metadata(url)
+        if metadata && !metadata[:error] && metadata[:title].present?
+          @fetched_attributes[:title] = metadata[:title]
+          @fetched_attributes[:description] = metadata[:description] if metadata[:description].present?
+          @fetched_attributes[:site_name] = metadata[:site_name] if metadata[:site_name].present?
+          return @fetched_attributes
+        end
+      rescue MetadataServiceClient::Error => e
+        Rails.logger.warn "Metadata service error, falling back to Ruby implementation: #{e.message}"
+      end
+    end
+
+    # Fallback to original Ruby implementation
     begin
       # if we haven't had a test inject a response into us
       if !@fetched_response
@@ -1221,6 +1238,10 @@ class Story < ApplicationRecord
     rescue
       @fetched_attributes
     end
+  end
+
+  def use_metadata_service?
+    ENV["USE_METADATA_SERVICE"] == "true" || Rails.env.production?
   end
 
   def self.title_maximum_length
