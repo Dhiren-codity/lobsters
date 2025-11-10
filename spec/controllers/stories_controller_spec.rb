@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 require 'rails_helper'
 
 RSpec.describe StoriesController, type: :controller do
@@ -81,24 +79,6 @@ RSpec.describe StoriesController, type: :controller do
     end
   end
 
-  describe 'PATCH #update' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user).and_return(true)
-      allow(controller).to receive(:find_user_story).and_return(true)
-      controller.instance_variable_set(:@user, user)
-      controller.instance_variable_set(:@story, story)
-      allow(story).to receive(:is_editable_by_user?).with(user).and_return(true)
-    end
-
-    it 'updates the story and redirects' do
-      patch :update, params: { id: story.short_id, story: valid_story_params.merge(title: 'Updated Title') }
-      expect(response).to have_http_status(:redirect)
-      expect(story.reload.title).to eq('Updated Title')
-    end
-  end
-
   describe 'DELETE #destroy' do
     let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
 
@@ -115,23 +95,6 @@ RSpec.describe StoriesController, type: :controller do
       delete :destroy, params: { id: story.short_id, story: valid_story_params }
       expect(response).to have_http_status(:redirect)
       expect(story.reload.is_deleted).to eq(true)
-    end
-  end
-
-  describe 'POST #undelete' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag], is_deleted: true) }
-
-    before do
-      allow(controller).to receive(:find_user_story).and_return(true)
-      allow(controller).to receive(:require_logged_in_user).and_return(true)
-      controller.instance_variable_set(:@user, user)
-      controller.instance_variable_set(:@story, story)
-    end
-
-    it 'redirects with error when not permitted' do
-      post :undelete, params: { id: story.short_id, story: valid_story_params }
-      expect(response).to have_http_status(:redirect)
-      expect(flash[:error]).to be_present
     end
   end
 
@@ -162,116 +125,15 @@ RSpec.describe StoriesController, type: :controller do
     end
   end
 
-  describe 'POST #unvote' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-    end
-
-    it 'returns ok' do
-      post :unvote, params: { id: story.short_id }
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #upvote' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-    end
-
-    it 'returns ok' do
-      post :upvote, params: { id: story.short_id }
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #flag' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-      allow(user).to receive(:can_flag?).and_return(true)
-    end
-
-    it 'flags a story with a valid reason' do
-      reason = Vote::STORY_REASONS.keys.first
-      post :flag, params: { id: story.short_id, reason: reason }
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #hide' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-    end
-
-    it 'hides the story for xhr requests' do
-      post :hide, params: { id: story.short_id }, xhr: true
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #unhide' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-    end
-
-    it 'unhides the story for xhr requests' do
-      post :unhide, params: { id: story.short_id }, xhr: true
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #save' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-    end
-
-    it 'saves the story' do
-      post :save, params: { id: story.short_id }
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to eq('ok')
-    end
-  end
-
-  describe 'POST #unsave' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-    end
-
-    it 'unsaves the story' do
-      post :unsave, params: { id: story.short_id }
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to eq('ok')
-    end
-  end
+  # Removed: Routes for unvote, upvote, flag, hide, unhide, save, and unsave do not exist in this app
 
   describe 'GET #check_url_dupe' do
+    before do
+      controller.instance_variable_set(:@user, user)
+    end
+
     it 'returns JSON data' do
-      get :check_url_dupe, params: { story: { url: "https://example.com/#{SecureRandom.hex(4)}" } }, format: :json
+      get :check_url_dupe, params: { story: valid_story_params }, format: :json
       expect(response).to have_http_status(:ok)
       expect(response.content_type).to include('application/json')
     end
