@@ -73,7 +73,7 @@ RSpec.describe StoriesController, type: :controller do
       allow(story).to receive(:is_editable_by_user?).with(user).and_return(true)
     end
 
-    it 'returns http success' do
+    it 'renders successfully' do
       get :edit, params: { id: story.short_id }
       expect(response).to have_http_status(:ok)
     end
@@ -92,9 +92,19 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'marks the story as deleted and redirects' do
-      delete :destroy, params: { id: story.short_id }
+      delete :destroy, params: {
+        id: story.short_id,
+        story: {
+          title: story.title,
+          url: story.url || "https://example.com/#{SecureRandom.hex(6)}",
+          description: story.description || 'desc',
+          user_is_author: false,
+          user_is_following: false,
+          tags: [tag.tag]
+        }
+      }
       expect(response).to have_http_status(:redirect)
-      expect(story.reload.is_deleted).to be(true)
+      expect(story.reload.is_deleted).to be true
     end
   end
 
