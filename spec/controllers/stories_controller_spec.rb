@@ -36,7 +36,7 @@ RSpec.describe StoriesController, type: :controller do
       controller.instance_variable_set(:@user, user)
     end
 
-    it 'returns http success' do
+    it 'renders successfully' do
       get :new
       expect(response).to have_http_status(:ok)
     end
@@ -91,10 +91,10 @@ RSpec.describe StoriesController, type: :controller do
       controller.instance_variable_set(:@story, story)
     end
 
-    it 'soft deletes and redirects' do
-      delete :destroy, params: { id: story.short_id, story: valid_story_params }
+    it 'marks the story as deleted and redirects' do
+      delete :destroy, params: { id: story.short_id }
       expect(response).to have_http_status(:redirect)
-      expect(story.reload.is_deleted).to eq(true)
+      expect(story.reload.is_deleted).to be(true)
     end
   end
 
@@ -132,26 +132,12 @@ RSpec.describe StoriesController, type: :controller do
       controller.instance_variable_set(:@user, user)
     end
 
-    it 'returns JSON data' do
+    it 'returns JSON with dupe check info' do
       get :check_url_dupe, params: { story: valid_story_params }, format: :json
       expect(response).to have_http_status(:ok)
       expect(response.content_type).to include('application/json')
     end
   end
 
-  describe 'POST #disown' do
-    let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
-
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-      allow_any_instance_of(Story).to receive(:disownable_by_user?).and_return(true)
-      allow(InactiveUser).to receive(:disown!).and_return(true)
-    end
-
-    it 'disowns the story and redirects' do
-      post :disown, params: { id: story.short_id }
-      expect(response).to have_http_status(:redirect)
-    end
-  end
+  # Removed: Route for POST #disown does not exist in this app
 end
