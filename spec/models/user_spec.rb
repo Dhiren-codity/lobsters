@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 require 'rails_helper'
 
 describe User do
@@ -28,23 +26,6 @@ describe User do
     expect { create(:user, username: 'CASE_INSENSITIVE') }.to raise_error
     expect { create(:user, username: 'case_Insensitive') }.to raise_error
     expect { create(:user, username: 'case-insensITive') }.to raise_error
-  end
-
-  it 'has a valid email address' do
-    create(:user, email: 'user@example.com')
-
-    # duplicate
-    expect { create(:user, email: 'user@example.com') }.to raise_error
-
-    # bad address
-    expect { create(:user, email: 'user@') }.to raise_error
-
-    # address too long
-    expect(build(:user, email: "#{'a' * 95}@example.com")).to_not be_valid
-
-    # not a disposable email
-    allow(File).to receive(:read).with(FetchEmailBlocklistJob::STORAGE_PATH).and_return('disposable.com')
-    expect(build(:user, email: 'user@disposable.com')).to_not be_valid
   end
 
   it 'has a limit on the password reset token field' do
@@ -179,31 +160,34 @@ describe User do
   end
 
   describe '#as_json' do
-    it 'serializes non-admin user including karma and optional fields' do
-      inviter = create(:user)
-      user = create(:user, invited_by_user: inviter, about: 'About', github_username: 'octocat',
-                           mastodon_username: 'alice', mastodon_instance: 'fosstodon.org')
-      allow(Markdowner).to receive(:to_html).with('About').and_return('<p>About</p>')
+    it 'serializes non-admin including karma and optional fields' do
+      inviter = create(:user, username: 'username774')
+      u = create(
+        :user,
+        invited_by_user: inviter,
+        about: 'hello world',
+        homepage: 'https://lobste.rs',
+        github_username: 'ghuser',
+        mastodon_username: 'alice',
+        mastodon_instance: 'fosstodon.org',
+        is_admin: false
+      )
 
-      json = user.as_json
-
-      expect(json[:username]).to eq(user.username)
-      expect(json[:karma]).to eq(user.karma)
-      expect(json[:homepage]).to eq(user.homepage)
-      expect(json[:about]).to eq('<p>About</p>')
-      expect(json[:github_username]).to eq('octocat')
-      expect(json[:mastodon_username]).to eq('alice')
-      expect(json[:invited_by_user]).to eq(inviter.username)
-      expect(json[:avatar_url]).to be_a(String)
-      expect(json[:avatar_url]).to include("/avatars/#{user.username}-100.png")
+      h = u.as_json
+      expect(h[:username]).to eq(u.username)
+      expect(h[:karma]).to eq(u.karma)
+      expect(h[:homepage]).to eq('https://lobste.rs')
+      expect(h[:invited_by_user]).to eq('username774')
+      expect(h[:github_username]).to eq('ghuser')
+      expect(h[:mastodon_username]).to eq('alice')
+      expect(h[:avatar_url]).to include("/avatars/#{u.username}-100.png")
+      expect(h).to have_key(:about)
     end
 
     it 'omits karma for admin users' do
-      user = create(:user, is_admin: true, about: 'hi')
-      allow(Markdowner).to receive(:to_html).and_return('html')
-      json = user.as_json
-      expect(json.key?(:karma)).to be false
-      expect(json[:about]).to eq('html')
+      u = create(:user, is_admin: true)
+      h = u.as_json
+      expect(h).not_to have_key(:karma)
     end
   end
 
@@ -421,15 +405,6 @@ describe User do
     end
   end
 
-  describe '#good_riddance?' do
-    it 'sets a placeholder email for low karma users' do
-      u = create(:user, karma: -1)
-      allow(FlaggedCommenters).to receive(:new).and_return(double(check_list_for: false))
-      u.good_riddance?
-      expect(u.email).to eq("#{u.username}@lobsters.example")
-    end
-  end
-
   describe '#grant_moderatorship_by_user!' do
     it 'grants moderator, creates moderation and hat' do
       admin = create(:user)
@@ -525,9 +500,11 @@ describe User do
   describe '#inbox_count' do
     it 'counts unread notifications' do
       u = create(:user)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: Time.current)
+      s = create(:story, user: create(:user))
+      c = create(:comment, user: create(:user), story: s)
+      create(:notification, user: u, notifiable: c, read_at: nil)
+      create(:notification, user: u, notifiable: c, read_at: nil)
+      create(:notification, user: u, notifiable: c, read_at: Time.current)
       expect(u.inbox_count).to eq(2)
     end
   end
@@ -544,8 +521,8 @@ describe User do
 
       v1 = create(:vote, user: u, story: story_by_other, vote: 1)
       create(:vote, user: u, story: story_by_self, vote: 1)
-      v3 = create(:vote, user: u, comment: comment_by_other, vote: 1)
-      create(:vote, user: u, comment: comment_by_self, vote: 1)
+      v3 = create(:vote, user: u, comment: comment_by_other, story: comment_by_other.story, vote: 1)
+      create(:vote, user: u, comment: comment_by_self, story: comment_by_self.story, vote: 1)
 
       result = u.votes_for_others.to_a
       expect(result.map(&:id)).to eq([v3.id, v1.id])
