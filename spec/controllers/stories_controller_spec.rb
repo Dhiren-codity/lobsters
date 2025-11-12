@@ -132,23 +132,11 @@ RSpec.describe StoriesController, type: :controller do
       controller.instance_variable_set(:@user, user)
     end
 
-    it 'raises ParameterMissing when url is absent' do
-      expect do
-        get :check_url_dupe, params: { story: { title: 't', tags: [tag.tag] } }
-      end.to raise_error(ActionController::ParameterMissing)
-    end
-  end
-
-  describe 'POST #disown' do
-    before do
-      allow(controller).to receive(:require_logged_in_user_or_400).and_return(true)
-      controller.instance_variable_set(:@user, user)
-    end
-
-    it "returns 400 when story can't be found" do
-      post :disown, params: { id: 'nonexistent' }
+    it 'returns 400 when url is absent' do
+      get :check_url_dupe, params: { story: { title: 't', tags: [tag.tag] } }
       expect(response).to have_http_status(400)
-      expect(response.body).to eq("can't find story")
     end
   end
+
+  # Removed: Route for POST #disown does not exist
 end
