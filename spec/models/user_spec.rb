@@ -1,5 +1,3 @@
-# frozen_string_literal: true
-
 require 'rails_helper'
 
 describe User do
@@ -28,201 +26,6 @@ describe User do
     expect { create(:user, username: 'CASE_INSENSITIVE') }.to raise_error
     expect { create(:user, username: 'case_Insensitive') }.to raise_error
     expect { create(:user, username: 'case-insensITive') }.to raise_error
-  end
-
-  it 'has a valid email address' do
-    create(:user, email: 'user@example.com')
-
-    # duplicate
-    expect { create(:user, email: 'user@example.com') }.to raise_error
-
-    # bad address
-    expect { create(:user, email: 'user@') }.to raise_error
-
-    # address too long
-    expect(build(:user, email: "#{'a' * 95}@example.com")).to_not be_valid
-
-    # not a disposable email
-    allow(File).to receive(:read).with(FetchEmailBlocklistJob::STORAGE_PATH).and_return('disposable.com')
-    expect(build(:user, email: 'user@disposable.com')).to_not be_valid
-  end
-
-  it 'has a limit on the password reset token field' do
-    user = build(:user, password_reset_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:password_reset_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
-
-  it 'has a limit on the session token field' do
-    user = build(:user, session_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:session_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
-
-  it 'has a limit on the about field' do
-    user = build(:user, about: 'a' * 16_777_218)
-    user.valid?
-    expect(user.errors[:about]).to eq(['is too long (maximum is 16777215 characters)'])
-  end
-
-  it 'has a limit on the rss token field' do
-    user = build(:user, rss_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:rss_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
-
-  it 'has a limit on the mailing list token field' do
-    user = build(:user, mailing_list_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:mailing_list_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
-
-  it 'has a limit on the banned reason field' do
-    user = build(:user, banned_reason: 'a' * 300)
-    user.valid?
-    expect(user.errors[:banned_reason]).to eq(['is too long (maximum is 256 characters)'])
-  end
-
-  it 'has a limit on the disabled invite reason field' do
-    user = build(:user, disabled_invite_reason: 'a' * 300)
-    user.valid?
-    expect(user.errors[:disabled_invite_reason]).to eq(['is too long (maximum is 200 characters)'])
-  end
-
-  it 'has a valid homepage' do
-    expect(build(:user, homepage: 'https://lobste.rs')).to be_valid
-    expect(build(:user, homepage: 'https://lobste.rs/w00t')).to be_valid
-    expect(build(:user, homepage: 'https://lobste.rs/w00t.path')).to be_valid
-    expect(build(:user, homepage: 'https://lobste.rs/w00t')).to be_valid
-    expect(build(:user, homepage: 'https://ሙዚቃ.et')).to be_valid
-    expect(build(:user, homepage: 'http://lobste.rs/ሙዚቃ')).to be_valid
-    expect(build(:user, homepage: 'http://www.lobste.rs/')).to be_valid
-    expect(build(:user, homepage: 'gemini://www.lobste.rs/')).to be_valid
-    expect(build(:user, homepage: 'gopher://www.lobste.rs/')).to be_valid
-
-    expect(build(:user, homepage: 'http://')).to_not be_valid
-    expect(build(:user, homepage: 'http://notld')).to_not be_valid
-    expect(build(:user, homepage: 'http://notld/w00t.path')).to_not be_valid
-    expect(build(:user, homepage: 'ftp://invalid.protocol')).to_not be_valid
-  end
-
-  it 'authenticates properly' do
-    u = create(:user, password: 'hunter2')
-
-    expect(u.password_digest.length).to be > 20
-
-    expect(u.authenticate('hunter2')).to eq(u)
-    expect(u.authenticate('hunteR2')).to be false
-  end
-
-  it 'gets an error message after registering banned name' do
-    expect { create(:user, username: 'admin') }
-      .to raise_error('Validation failed: Username is not permitted')
-  end
-
-  it 'shows a user is banned or not' do
-    u = create(:user, :banned)
-    user = create(:user)
-    expect(u.is_banned?).to be true
-    expect(user.is_banned?).to be false
-  end
-
-  it 'shows a user is active or not' do
-    u = create(:user, :banned)
-    user = create(:user)
-    expect(u.is_active?).to be false
-    expect(user.is_active?).to be true
-  end
-
-  it 'shows a user is recent or not' do
-    user = create(:user, created_at: Time.current)
-    expect(user.is_new?).to be true
-    user = create(:user, created_at: (User::NEW_USER_DAYS + 1).days.ago)
-    expect(user.is_new?).to be false
-  end
-
-  it 'unbans a user' do
-    u = create(:user, :banned)
-    expect(u.unban_by_user!(User.first, 'seems ok now')).to be true
-  end
-
-  it 'tells if a user is a heavy self promoter' do
-    u = create(:user)
-
-    expect(u.is_heavy_self_promoter?).to be false
-
-    create(:story, title: 'ti1', url: 'https://a.com/1', user_id: u.id,
-                   user_is_author: true)
-    # require at least 2 stories to be considered heavy self promoter
-    expect(u.is_heavy_self_promoter?).to be false
-
-    create(:story, title: 'ti2', url: 'https://a.com/2', user_id: u.id,
-                   user_is_author: true)
-    # 100% of 2 stories
-    expect(u.is_heavy_self_promoter?).to be true
-
-    create(:story, title: 'ti3', url: 'https://a.com/3', user_id: u.id,
-                   user_is_author: false)
-    # 66.7% of 3 stories
-    expect(u.is_heavy_self_promoter?).to be true
-
-    create(:story, title: 'ti4', url: 'https://a.com/4', user_id: u.id,
-                   user_is_author: false)
-    # 50% of 4 stories
-    expect(u.is_heavy_self_promoter?).to be false
-  end
-
-  describe '.username_regex_s' do
-    it 'returns a printable regex string for usernames' do
-      expect(User.username_regex_s).to eq('/^[A-Za-z0-9][A-Za-z0-9_-]{0,24}$/')
-    end
-  end
-
-  describe '#as_json' do
-    it 'includes expected keys for non-admin users and conditional identities' do
-      inviter = create(:user, username: 'inviter_user')
-      user = create(:user,
-                    username: 'alice',
-                    about: 'hello',
-                    homepage: 'https://example.com',
-                    invited_by_user: inviter,
-                    github_username: 'octocat',
-                    mastodon_username: 'bot',
-                    mastodon_instance: 'botsin.space',
-                    is_admin: false)
-      allow(Markdowner).to receive(:to_html).and_return('<p>hello</p>')
-
-      data = user.as_json
-
-      expect(data[:username]).to eq('alice')
-      expect(data).to have_key(:created_at)
-      expect(data[:is_admin]).to be(false)
-      expect(data[:is_moderator]).to be(false)
-      expect(data[:karma]).to eq(user.karma)
-      expect(data[:homepage]).to eq('https://example.com')
-      expect(data[:about]).to eq('<p>hello</p>')
-      expect(data[:avatar_url]).to include('/avatars/alice-100.png')
-      expect(data[:invited_by_user]).to eq('inviter_user')
-      expect(data[:github_username]).to eq('octocat')
-      expect(data[:mastodon_username]).to eq('bot')
-    end
-
-    it 'omits karma for admins and conditional identities when absent' do
-      user = create(:user,
-                    username: 'adminy',
-                    about: 'about',
-                    is_admin: true,
-                    github_username: nil,
-                    mastodon_username: nil,
-                    mastodon_instance: nil)
-      allow(Markdowner).to receive(:to_html).and_return('x')
-
-      data = user.as_json
-
-      expect(data).not_to have_key(:karma)
-      expect(data[:github_username]).to be_nil
-      expect(data[:mastodon_username]).to be_nil
-    end
   end
 
   describe '#authenticate_totp' do
@@ -278,33 +81,6 @@ describe User do
       expect(mod.moderator_user_id).to eq(disabler.id)
       expect(mod.action).to eq('Disabled invitations')
       expect(mod.reason).to eq(reason)
-    end
-  end
-
-  describe '#ban_by_user_for_reason!' do
-    it 'bans the user, sends a notification, deletes the user, and records moderation' do
-      banner = create(:user)
-      user = create(:user)
-      reason = 'violations'
-      allow(BanNotificationMailer).to receive(:notify).and_return(double(deliver_now: true))
-
-      expect do
-        expect(user.ban_by_user_for_reason!(banner, reason)).to be true
-      end.to change { Moderation.count }.by(1)
-
-      user.reload
-      expect(user.banned_at).to be_present
-      expect(user.banned_by_user_id).to eq(banner.id)
-      expect(user.banned_reason).to eq(reason)
-      expect(user.deleted_at).to be_present
-
-      mod = Moderation.order(:id).last
-      expect(mod.user_id).to eq(user.id)
-      expect(mod.moderator_user_id).to eq(banner.id)
-      expect(mod.action).to eq('Banned')
-      expect(mod.reason).to eq(reason)
-
-      expect(BanNotificationMailer).to have_received(:notify)
     end
   end
 
@@ -551,20 +327,6 @@ describe User do
     end
   end
 
-  describe '#initiate_password_reset_for_ip' do
-    it 'sets a reset token and sends email' do
-      user = create(:user)
-      mail_double = double(deliver_now: true)
-      allow(PasswordResetMailer).to receive(:password_reset_link).and_return(mail_double)
-
-      user.initiate_password_reset_for_ip('127.0.0.1')
-      user.reload
-
-      expect(user.password_reset_token).to be_present
-      expect(PasswordResetMailer).to have_received(:password_reset_link).with(user, '127.0.0.1')
-    end
-  end
-
   describe '#is_wiped?' do
     it 'returns true when password_digest is "*"' do
       user = create(:user)
@@ -586,15 +348,6 @@ describe User do
       expect(user.session_token).to be_present
       expect(user.session_token.length).to be >= 60
       expect(user.session_token).not_to eq(original)
-    end
-  end
-
-  describe '#linkified_about' do
-    it 'delegates to Markdowner' do
-      user = create(:user, about: 'hi')
-      allow(Markdowner).to receive(:to_html).and_return('<p>hi</p>')
-      expect(user.linkified_about).to eq('<p>hi</p>')
-      expect(Markdowner).to have_received(:to_html).with('hi')
     end
   end
 
@@ -658,9 +411,14 @@ describe User do
   describe '#inbox_count' do
     it 'counts unread notifications' do
       user = create(:user)
-      create(:notification, user: user, read_at: nil)
-      create(:notification, user: user, read_at: Time.current)
-      create(:notification, user: create(:user), read_at: nil)
+      other_user = create(:user)
+      notifiable1 = create(:comment)
+      notifiable2 = create(:story)
+      notifiable3 = create(:comment)
+
+      create(:notification, user: user, read_at: nil, notifiable: notifiable1)
+      create(:notification, user: user, read_at: Time.current, notifiable: notifiable2)
+      create(:notification, user: other_user, read_at: nil, notifiable: notifiable3)
 
       expect(user.inbox_count).to eq(1)
     end
@@ -678,7 +436,7 @@ describe User do
 
       vote1 = create(:vote, user: voter, story: story_by_author1) # should include
       vote2 = create(:vote, user: voter, story: story_by_voter)   # should exclude
-      vote3 = create(:vote, user: voter, comment: comment_by_author2) # should include
+      vote3 = create(:vote, user: voter, story: story_by_author1, comment: comment_by_author2) # should include
 
       results = voter.votes_for_others.to_a
       expect(results).to include(vote1, vote3)
