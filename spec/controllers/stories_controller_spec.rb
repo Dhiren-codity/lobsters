@@ -1,5 +1,3 @@
-require 'rails_helper'
-
 RSpec.describe StoriesController, type: :controller do
   let(:user) { FactoryBot.create(:user) }
   let!(:tag) { FactoryBot.create(:tag, active: true) }
@@ -44,9 +42,9 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'creates a new Story and redirects' do
-      expect {
+      expect do
         post :create, params: { story: valid_story_params }
-      }.to change(Story, :count).by(1)
+      end.to change(Story, :count).by(1)
       expect(response).to have_http_status(:redirect)
     end
   end
@@ -165,12 +163,12 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'hides the story and redirects' do
-      expect {
+      expect do
         post :hide, params: { id: story.short_id }
-      }.to change(HiddenStory, :count).by(1)
+      end.to change(HiddenStory, :count).by(1)
       expect(response).to have_http_status(:redirect)
     end
-  end }
+  end
 
   describe 'POST #unhide' do
     let!(:story) { FactoryBot.create(:story, user: user, tags: [tag]) }
@@ -182,9 +180,9 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'unhides the story and redirects' do
-      expect {
+      expect do
         post :unhide, params: { id: story.short_id }
-      }.to change(HiddenStory, :count).by(-1)
+      end.to change(HiddenStory, :count).by(-1)
       expect(response).to have_http_status(:redirect)
     end
   end
@@ -198,9 +196,9 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'saves the story for the user and returns ok' do
-      expect {
+      expect do
         post :save, params: { id: story.short_id }
-      }.to change(SavedStory, :count).by(1)
+      end.to change(SavedStory, :count).by(1)
       expect(response.body).to eq('ok')
     end
   end
@@ -215,9 +213,9 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'unsaves the story and returns ok' do
-      expect {
+      expect do
         post :unsave, params: { id: story.short_id }
-      }.to change(SavedStory, :count).by(-1)
+      end.to change(SavedStory, :count).by(-1)
       expect(response.body).to eq('ok')
     end
   end
@@ -238,7 +236,8 @@ RSpec.describe StoriesController, type: :controller do
     before do
       allow(controller).to receive(:require_logged_in_user).and_return(true)
       controller.instance_variable_set(:@user, user)
-      allow_any_instance_of(Story).to receive(:fetched_attributes).and_return({ url: 'http://example.com', title: 'Title' })
+      allow_any_instance_of(Story).to receive(:fetched_attributes).and_return({ url: 'http://example.com',
+                                                                                title: 'Title' })
     end
 
     it 'returns JSON with fetched attributes' do
@@ -258,9 +257,9 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'raises ParameterMissing when url is absent' do
-      expect {
+      expect do
         get :check_url_dupe, params: { story: { title: 't', tags: [tag.tag] } }
-      }.to raise_error(ActionController::ParameterMissing)
+      end.to raise_error(ActionController::ParameterMissing)
     end
   end
 

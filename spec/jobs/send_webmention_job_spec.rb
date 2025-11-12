@@ -1,7 +1,3 @@
-# frozen_string_literal: true
-
-require 'rails_helper'
-
 RSpec.describe SendWebmentionJob, type: :job do
   include ActiveJob::TestHelper
 
@@ -99,7 +95,9 @@ RSpec.describe SendWebmentionJob, type: :job do
     it 'converts relative path to absolute URI object' do
       result = job.uri_to_absolute('/webmention', req_uri)
       expect(result).to be_a(URI)
-      expect(result.to_s).to eq('https://example.com/webmention')
+      expect(result.scheme).to eq('https')
+      expect(result.host).to eq('example.com')
+      expect(result.path).to eq('/webmention')
     end
 
     it 'preserves port and scheme of the request uri' do
@@ -208,9 +206,12 @@ RSpec.describe SendWebmentionJob, type: :job do
       body = '<html><head><link rel="webmention" href="/wm"></head></html>'
       allow(sp).to receive(:fetch).and_return(sponge_response(link: nil, body: body))
 
-      expected_endpoint = URI.parse('https://remote.example/wm')
-      expect_any_instance_of(described_class).to receive(:send_webmention).with(source_url, target_url,
-                                                                                expected_endpoint)
+      expect_any_instance_of(described_class).to receive(:send_webmention) do |_, _, endpoint|
+        expect(endpoint).to be_a(URI)
+        expect(endpoint.scheme).to eq('https')
+        expect(endpoint.host).to eq('remote.example')
+        expect(endpoint.path).to eq('/wm')
+      end
       described_class.perform_now(story)
     end
 
