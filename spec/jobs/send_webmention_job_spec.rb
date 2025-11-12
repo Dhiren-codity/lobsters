@@ -206,7 +206,7 @@ RSpec.describe SendWebmentionJob, type: :job do
       body = '<html><head><link rel="webmention" href="/wm"></head></html>'
       allow(sp).to receive(:fetch).and_return(sponge_response(link: nil, body: body))
 
-      expect_any_instance_of(described_class).to receive(:send_webmention) do |_, _, endpoint|
+      expect_any_instance_of(described_class).to receive(:send_webmention) do |_, _source, _target, endpoint|
         expect(endpoint).to be_a(URI)
         expect(endpoint.scheme).to eq('https')
         expect(endpoint.host).to eq('remote.example')
