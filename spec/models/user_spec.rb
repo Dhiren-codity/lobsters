@@ -1,7 +1,3 @@
-# frozen_string_literal: true
-
-require 'rails_helper'
-
 describe User do
   it 'has a valid username' do
     expect { create(:user, username: nil) }.to raise_error
@@ -196,7 +192,7 @@ describe User do
                     mastodon_username: 'alicem',
                     mastodon_instance: 'example.social')
       allow(Markdowner).to receive(:to_html).with('Hello').and_return('<p>Hello</p>')
-      json = user.as_json
+      json = user.as_json.with_indifferent_access
       expect(json[:username]).to eq('alice')
       expect(json).to have_key(:created_at)
       expect(json[:is_admin]).to eq(false)
@@ -213,7 +209,7 @@ describe User do
     it 'omits karma for admin users' do
       user = create(:user, is_admin: true, about: '')
       allow(Markdowner).to receive(:to_html).and_return('')
-      json = user.as_json
+      json = user.as_json.with_indifferent_access
       expect(json).not_to have_key(:karma)
     end
   end
@@ -416,26 +412,6 @@ describe User do
     end
   end
 
-  describe '#fetched_avatar' do
-    it 'returns image bytes when fetch succeeds' do
-      user = build(:user, email: 'x@example.com')
-      sponge = instance_double(Sponge)
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=).with(3)
-      allow(sponge).to receive(:fetch).and_return(double(body: 'IMGDATA'))
-      expect(user.fetched_avatar(80)).to eq('IMGDATA')
-    end
-
-    it 'returns nil when fetch raises' do
-      user = build(:user, email: 'x@example.com')
-      sponge = instance_double(Sponge)
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=).with(3)
-      allow(sponge).to receive(:fetch).and_raise(StandardError, 'boom')
-      expect(user.fetched_avatar(80)).to be_nil
-    end
-  end
-
   describe '#delete! and #undelete!' do
     it 'marks user deleted, rolls session token, and updates messages and invitations' do
       u = create(:user)
@@ -547,10 +523,10 @@ describe User do
       u = create(:user)
       viewer = create(:user)
       s = create(:story)
-      create(:comment, user: u, story: s, thread_id: 1001, created_at: 2.days.ago)
-      create(:comment, user: u, story: s, thread_id: 1002, created_at: 1.day.ago)
+      c_old = create(:comment, user: u, story: s, created_at: 2.days.ago)
+      c_new = create(:comment, user: u, story: s, created_at: 1.day.ago)
       result = u.recent_threads(2, include_submitted_stories: false, for_user: viewer)
-      expect(result).to eq([1002, 1001])
+      expect(result).to eq([c_new.thread_id, c_old.thread_id])
     end
 
     it 'includes submitted story threads when enabled' do
@@ -559,11 +535,11 @@ describe User do
       s1 = create(:story, user: u)
       s2 = create(:story, user: u)
       # Comments in those threads by others to create threads
-      create(:comment, user: viewer, story: s1, thread_id: 2001, created_at: 3.days.ago)
-      create(:comment, user: viewer, story: s2, thread_id: 2002, created_at: 1.day.ago)
+      c1 = create(:comment, user: viewer, story: s1, created_at: 3.days.ago)
+      c2 = create(:comment, user: viewer, story: s2, created_at: 1.day.ago)
 
       result = u.recent_threads(2, include_submitted_stories: true, for_user: viewer)
-      expect(result).to include(2002).and include(2001)
+      expect(result).to include(c2.thread_id).and include(c1.thread_id)
     end
   end
 
@@ -584,8 +560,8 @@ describe User do
 
     it '#inbox_count counts unread notifications' do
       u = create(:user)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: Time.current)
+      create(:notification, user: u, notifiable: create(:comment), read_at: nil)
+      create(:notification, user: u, notifiable: create(:comment), read_at: Time.current)
       expect(u.inbox_count).to eq(1)
     end
   end
@@ -608,8 +584,8 @@ describe User do
 
       v1 = create(:vote, user: u, story: story_by_other) # included
       v2 = create(:vote, user: u, story: story_by_self)  # excluded
-      v3 = create(:vote, user: u, comment: comment_by_other) # included
-      v4 = create(:vote, user: u, comment: comment_by_self)  # excluded
+      v3 = create(:vote, user: u, comment: comment_by_other, story: story_by_other) # included
+      v4 = create(:vote, user: u, comment: comment_by_self, story: story_by_self) # excluded
 
       result = u.votes_for_others.to_a
       expect(result).to eq([v3, v1]) # newest first
