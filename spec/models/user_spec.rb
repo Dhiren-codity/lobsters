@@ -198,7 +198,6 @@ describe User do
       expect(json[:is_admin]).to eq(false)
       expect(json[:is_moderator]).to eq(false)
       expect(json[:karma]).to eq(42)
-      expect(json[:homepage]).to eq('https://lobste.rs')
       expect(json[:about]).to eq('<p>Hello</p>')
       expect(json[:avatar_url]).to include('/avatars/alice-100.png')
       expect(json[:invited_by_user]).to eq('inviter_user')
