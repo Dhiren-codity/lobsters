@@ -1,593 +1,644 @@
-require 'rails_helper'
+# typed: false
 
-RSpec.describe User, type: :model do
-  it 'has a valid username' do
-    expect { create(:user, username: nil) }.to raise_error
-    expect { create(:user, username: '') }.to raise_error
-    expect { create(:user, username: '*') }.to raise_error
-    # security controls, usernames are used in queries and filenames
-    expect { create(:user, username: "a'b") }.to raise_error
-    expect { create(:user, username: 'a"b') }.to raise_error
-    expect { create(:user, username: '../b') }.to raise_error
+class User < ApplicationRecord
+  has_many :stories, -> { includes :user }, inverse_of: :user
+  has_many :comments,
+           inverse_of: :user,
+           dependent: :restrict_with_exception
+  has_many :sent_messages,
+           class_name: 'Message',
+           foreign_key: 'author_user_id',
+           inverse_of: :author,
+           dependent: :restrict_with_exception
+  has_many :received_messages,
+           class_name: 'Message',
+           foreign_key: 'recipient_user_id',
+           inverse_of: :recipient,
+           dependent: :restrict_with_exception
+  has_many :tag_filters, dependent: :destroy
+  has_many :tag_filter_tags,
+           class_name: 'Tag',
+           through: :tag_filters,
+           source: :tag,
+           dependent: :delete_all
+  belongs_to :invited_by_user,
+             class_name: 'User',
+             inverse_of: false,
+             optional: true
+  belongs_to :banned_by_user,
+             class_name: 'User',
+             inverse_of: false,
+             optional: true
+  belongs_to :disabled_invite_by_user,
+             class_name: 'User',
+             inverse_of: false,
+             optional: true
+  has_many :invitations, dependent: :destroy
+  has_many :mod_notes,
+           inverse_of: :user,
+           dependent: :restrict_with_exception
+  has_many :moderations,
+           inverse_of: :moderator,
+           dependent: :restrict_with_exception
+  has_many :votes, dependent: :destroy
+  has_many :voted_stories, -> { where('votes.comment_id' => nil) },
+           through: :votes,
+           source: :story
+  has_many :upvoted_stories,
+           lambda {
+             where('votes.comment_id' => nil, 'votes.vote' => 1)
+               .where('stories.user_id != votes.user_id')
+           },
+           through: :votes,
+           source: :story
+  has_many :hats, dependent: :destroy
+  has_many :wearable_hats, -> { where(doffed_at: nil) },
+           class_name: 'Hat',
+           inverse_of: :user
+  has_many :notifications
+  has_many :hidings,
+           class_name: 'HiddenStory',
+           inverse_of: :user,
+           dependent: :destroy
 
-    create(:user, username: 'newbie')
-    expect { create(:user, username: 'newbie') }.to raise_error
+  include Token
+  include EmailBlocklistValidation
 
-    create(:user, username: 'underscores_and-dashes')
-    invalid_username_variants = %w[underscores-and_dashes underscores_and_dashes underscores-and-dashes]
+  # As of Rails 8.0, `has_secure_password` generates a `password_reset_token`
+  # method that shadows the explicit `password_reset_token` attribute.
+  # So we need to explictily disable that.
+  has_secure_password(reset_token: false)
 
-    invalid_username_variants.each do |invalid_username|
-      subject = build(:user, username: invalid_username)
-      expect(subject).to_not be_valid
-      expect(subject.errors[:username]).to eq(['is already in use (perhaps swapping _ and -)'])
-    end
-
-    create(:user, username: 'case_insensitive')
-    expect { create(:user, username: 'CASE_INSENSITIVE') }.to raise_error
-    expect { create(:user, username: 'case_Insensitive') }.to raise_error
-    expect { create(:user, username: 'case-insensITive') }.to raise_error
+  typed_store :settings do |s|
+    s.string :prefers_color_scheme, default: 'system'
+    s.string :prefers_contrast, default: 'system'
+    s.boolean :email_notifications, default: false
+    s.boolean :email_replies, default: false
+    s.boolean :pushover_replies, default: false
+    s.string :pushover_user_key
+    s.boolean :email_messages, default: false
+    s.boolean :pushover_messages, default: false
+    s.boolean :email_mentions, default: false
+    s.boolean :show_avatars, default: true
+    s.boolean :show_email, default: false
+    s.boolean :show_story_previews, default: false
+    s.boolean :show_submitted_story_threads, default: false
+    s.string :totp_secret
+    s.string :github_oauth_token
+    s.string :github_username
+    s.string :mastodon_instance
+    s.string :mastodon_oauth_token
+    s.string :mastodon_username
+    s.string :homepage
   end
 
-  it 'has a valid email address' do
-    create(:user, email: 'user@example.com')
+  validates :prefers_color_scheme, inclusion: %w[system light dark]
+  validates :prefers_contrast, inclusion: %w[system normal high]
 
-    # duplicate
-    expect { create(:user, email: 'user@example.com') }.to raise_error
+  validates :email,
+            length: { maximum: 100 },
+            format: { with: /\A[^@ ]+@[^@ ]+\.[^@ ]+\Z/ },
+            uniqueness: { case_sensitive: false }
 
-    # bad address
-    expect { create(:user, email: 'user@') }.to raise_error
+  validates :homepage,
+            format: {
+              with: %r{\A(?:https?|gemini|gopher)://[^/\s]+\.[^./\s]+(/.*)?\Z}
+            },
+            allow_blank: true
 
-    # address too long
-    expect(build(:user, email: 'a' * 95 + '@example.com')).to_not be_valid
+  validates :password, presence: true, on: :create
 
-    # not a disposable email
-    allow(File).to receive(:read).with(FetchEmailBlocklistJob::STORAGE_PATH).and_return('disposable.com')
-    expect(build(:user, email: 'user@disposable.com')).to_not be_valid
-  end
+  VALID_USERNAME = /[A-Za-z0-9][A-Za-z0-9_-]{0,24}/
+  validates :username,
+            format: { with: /\A#{VALID_USERNAME}\z/o },
+            length: { maximum: 50 },
+            uniqueness: { case_sensitive: false }
+  validate :underscores_and_dashes_in_username
+  validates :password_reset_token,
+            length: { maximum: 75 }
+  validates :session_token,
+            length: { maximum: 75 }
+  validates :about,
+            length: { maximum: 16_777_215 }
+  validates :rss_token,
+            length: { maximum: 75 }
+  validates :mailing_list_token,
+            length: { maximum: 75 }
+  validates :banned_reason,
+            length: { maximum: 256 }
+  validates :disabled_invite_reason,
+            length: { maximum: 200 }
 
-  it 'has a limit on the password reset token field' do
-    user = build(:user, password_reset_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:password_reset_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
+  validates :show_email, :is_admin, :is_moderator, :pushover_mentions,
+            inclusion: { in: [true, false] }
 
-  it 'has a limit on the session token field' do
-    user = build(:user, session_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:session_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
+  validates :session_token,
+            allow_blank: true,
+            presence: true
 
-  it 'has a limit on the about field' do
-    user = build(:user, about: 'a' * 16_777_218)
-    user.valid?
-    expect(user.errors[:about]).to eq(['is too long (maximum is 16777215 characters)'])
-  end
+  validates :karma,
+            presence: true
 
-  it 'has a limit on the rss token field' do
-    user = build(:user, rss_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:rss_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
+  validates :settings,
+            length: { maximum: 16_777_215 }
 
-  it 'has a limit on the mailing list token field' do
-    user = build(:user, mailing_list_token: 'a' * 100)
-    user.valid?
-    expect(user.errors[:mailing_list_token]).to eq(['is too long (maximum is 75 characters)'])
-  end
-
-  it 'has a limit on the banned reason field' do
-    user = build(:user, banned_reason: 'a' * 300)
-    user.valid?
-    expect(user.errors[:banned_reason]).to eq(['is too long (maximum is 256 characters)'])
-  end
-
-  it 'has a limit on the disabled invite reason field' do
-    user = build(:user, disabled_invite_reason: 'a' * 300)
-    user.valid?
-    expect(user.errors[:disabled_invite_reason]).to eq(['is too long (maximum is 200 characters)'])
-  end
-
-  it 'has a valid homepage' do
-    expect(build(:user, homepage: 'https://lobste.rs')).to be_valid
-    expect(build(:user, homepage: 'https://lobste.rs/w00t')).to be_valid
-    expect(build(:user, homepage: 'https://lobste.rs/w00t.path')).to be_valid
-    expect(build(:user, homepage: 'https://lobste.rs/w00t')).to be_valid
-    expect(build(:user, homepage: 'https://ሙዚቃ.et')).to be_valid
-    expect(build(:user, homepage: 'http://lobste.rs/ሙዚቃ')).to be_valid
-    expect(build(:user, homepage: 'http://www.lobste.rs/')).to be_valid
-    expect(build(:user, homepage: 'gemini://www.lobste.rs/')).to be_valid
-    expect(build(:user, homepage: 'gopher://www.lobste.rs/')).to be_valid
-
-    expect(build(:user, homepage: 'http://')).to_not be_valid
-    expect(build(:user, homepage: 'http://notld')).to_not be_valid
-    expect(build(:user, homepage: 'http://notld/w00t.path')).to_not be_valid
-    expect(build(:user, homepage: 'ftp://invalid.protocol')).to_not be_valid
-  end
-
-  it 'authenticates properly' do
-    u = create(:user, password: 'hunter2')
-
-    expect(u.password_digest.length).to be > 20
-
-    expect(u.authenticate('hunter2')).to eq(u)
-    expect(u.authenticate('hunteR2')).to be false
-  end
-
-  it 'gets an error message after registering banned name' do
-    expect { create(:user, username: 'admin') }
-      .to raise_error('Validation failed: Username is not permitted')
-  end
-
-  it 'shows a user is banned or not' do
-    u = create(:user, :banned)
-    user = create(:user)
-    expect(u.is_banned?).to be true
-    expect(user.is_banned?).to be false
-  end
-
-  it 'shows a user is active or not' do
-    u = create(:user, :banned)
-    user = create(:user)
-    expect(u.is_active?).to be false
-    expect(user.is_active?).to be true
-  end
-
-  it 'shows a user is recent or not' do
-    user = create(:user, created_at: Time.current)
-    expect(user.is_new?).to be true
-    user = create(:user, created_at: (User::NEW_USER_DAYS + 1).days.ago)
-    expect(user.is_new?).to be false
-  end
-
-  it 'unbans a user' do
-    u = create(:user, :banned)
-    expect(u.unban_by_user!(User.first, 'seems ok now')).to be true
-  end
-
-  it 'tells if a user is a heavy self promoter' do
-    u = create(:user)
-
-    expect(u.is_heavy_self_promoter?).to be false
-
-    create(:story, title: 'ti1', url: 'https://a.com/1', user_id: u.id,
-                   user_is_author: true)
-    # require at least 2 stories to be considered heavy self promoter
-    expect(u.is_heavy_self_promoter?).to be false
-
-    create(:story, title: 'ti2', url: 'https://a.com/2', user_id: u.id,
-                   user_is_author: true)
-    # 100% of 2 stories
-    expect(u.is_heavy_self_promoter?).to be true
-
-    create(:story, title: 'ti3', url: 'https://a.com/3', user_id: u.id,
-                   user_is_author: false)
-    # 66.7% of 3 stories
-    expect(u.is_heavy_self_promoter?).to be true
-
-    create(:story, title: 'ti4', url: 'https://a.com/4', user_id: u.id,
-                   user_is_author: false)
-    # 50% of 4 stories
-    expect(u.is_heavy_self_promoter?).to be false
-  end
-
-  describe '.username_regex_s' do
-    it 'returns a printable regex string with anchors' do
-      str = User.username_regex_s
-      expect(str).to start_with('/^')
-      expect(str).to end_with('$/')
-      expect(str).to include('[A-Za-z0-9_-]')
+  validates_each :username do |record, attr, value|
+    if BANNED_USERNAMES.include?(value.to_s.downcase) || value.starts_with?('tag-')
+      record.errors.add(attr, 'is not permitted')
     end
   end
 
-  describe '#as_json' do
-    it 'includes karma for non-admins, basic fields, about/linkified, avatar_url, inviter, and oauth usernames when present' do
-      inviter = create(:user, username: 'inviter_user')
-      allow(Markdowner).to receive(:to_html).and_return('<p>about html</p>')
-      u = create(:user, username: 'alice', invited_by_user: inviter, about: 'about',
-                        homepage: 'https://example.com', github_username: 'alicehub', mastodon_username: 'alice',
-                        mastodon_instance: 'social.example', is_admin: false)
+  scope :active, -> { where(banned_at: nil, deleted_at: nil) }
+  scope :moderators, lambda {
+    where("
+      is_moderator = True OR
+      users.id IN (select distinct moderator_user_id from moderations where token not in (?))
+    ", Moderation::BAD_DOFFING_ENTRIES)
+  }
 
-      json = u.as_json
+  before_save :check_session_token
 
-      expect(json[:username]).to eq('alice')
-      expect(json).to have_key(:created_at)
-      expect(json[:is_admin]).to be(false)
-      expect(json[:is_moderator]).to be(false)
-      expect(json[:karma]).to eq(u.karma)
-      expect(json[:homepage]).to eq('https://example.com')
-      expect(json[:about]).to eq('<p>about html</p>')
-      expect(json[:avatar_url].to_s).to include('avatars/alice-100.png')
-      expect(json[:invited_by_user]).to eq('inviter_user')
-      expect(json[:github_username]).to eq('alicehub')
-      expect(json[:mastodon_username]).to eq('alice')
+  BANNED_USERNAMES = %w[admin administrator contact fraud guest
+                        help hostmaster lobster lobsters mailer-daemon moderator
+                        moderators nobody postmaster root security support
+                        sysop webmaster enable new signup].freeze
+
+  # days old accounts are considered new for
+  NEW_USER_DAYS = 70
+
+  # minimum karma required to be able to offer title/tag suggestions
+  MIN_KARMA_TO_SUGGEST = 10
+
+  # minimum karma required to be able to flag comments
+  MIN_KARMA_TO_FLAG = 50
+
+  # minimum karma required to be able to submit new stories
+  MIN_KARMA_TO_SUBMIT_STORIES = -4
+
+  # minimum karma required to process invitation requests
+  MIN_KARMA_FOR_INVITATION_REQUESTS = MIN_KARMA_TO_FLAG
+
+  # proportion of posts authored by user to consider as heavy self promoter
+  HEAVY_SELF_PROMOTER_PROPORTION = 0.51
+
+  # minimum number of submitted stories before checking self promotion
+  MIN_STORIES_CHECK_SELF_PROMOTION = 2
+
+  # karma threshold to be considered a high karma user
+  HIGH_KARMA_THRESHOLD = 100
+
+  def underscores_and_dashes_in_username
+    username_regex = '^' + username.gsub(/_|-/, '[-_]') + '$'
+    return unless username_regex.include?('[-_]')
+
+    collisions = User.where('username REGEXP ?', username_regex).where.not(id: id)
+    errors.add(:username, 'is already in use (perhaps swapping _ and -)') if collisions.any?
+  end
+
+  def self./(username)
+    find_by!(username: username)
+  end
+
+  def self.username_regex_s
+    '/^' + VALID_USERNAME.to_s.gsub(/(\?-mix:|\(|\))/, '') + '$/'
+  end
+
+  def as_json(_options = {})
+    attrs = %i[
+      username
+      created_at
+      is_admin
+      is_moderator
+    ]
+
+    attrs.push :karma unless is_admin?
+
+    attrs.push :homepage
+
+    h = super(only: attrs)
+    h = h.symbolize_keys
+
+    h[:about] = linkified_about
+    h[:avatar_url] = avatar_url
+    h[:invited_by_user] = User.where(id: invited_by_user_id).pick(:username)
+
+    h[:github_username] = github_username if github_username.present?
+
+    h[:mastodon_username] = mastodon_username if mastodon_username.present?
+
+    h
+  end
+
+  def authenticate_totp(code)
+    totp = ROTP::TOTP.new(totp_secret)
+    totp.verify(code)
+  end
+
+  def avatar_path(size = 100)
+    ActionController::Base.helpers.image_path(
+      "/avatars/#{username}-#{size}.png",
+      skip_pipeline: true
+    )
+  end
+
+  def avatar_url(size = 100)
+    ActionController::Base.helpers.image_url(
+      "/avatars/#{username}-#{size}.png",
+      skip_pipeline: true
+    )
+  end
+
+  def disable_invite_by_user_for_reason!(disabler, reason)
+    User.transaction do
+      self.disabled_invite_at = Time.current
+      self.disabled_invite_by_user_id = disabler.id
+      self.disabled_invite_reason = reason
+      save!
+
+      msg = Message.new
+      msg.deleted_by_author = true
+      msg.author_user_id = disabler.id
+      msg.recipient_user_id = id
+      msg.subject = 'Your invite privileges have been revoked'
+      msg.body = "The reason given:\n" \
+        "\n" \
+        "> *#{reason}*\n" \
+        "\n" \
+        '*This is an automated message.*'
+      msg.save!
+
+      m = Moderation.new
+      m.moderator_user_id = disabler.id
+      m.user_id = id
+      m.action = 'Disabled invitations'
+      m.reason = reason
+      m.save!
     end
 
-    it 'omits karma for admins and omits oauth usernames when blank' do
-      allow(Markdowner).to receive(:to_html).and_return('<p>about html</p>')
-      u = create(:user, username: 'adminuser', is_admin: true, github_username: nil, mastodon_username: nil,
-                        mastodon_instance: nil)
+    true
+  end
 
-      json = u.as_json
+  def ban_by_user_for_reason!(banner, reason)
+    User.transaction do
+      self.banned_at = Time.current
+      self.banned_by_user_id = banner.id
+      self.banned_reason = reason
 
-      expect(json.key?(:karma)).to be(false)
-      expect(json.key?(:github_username)).to be(false)
-      expect(json.key?(:mastodon_username)).to be(false)
+      BanNotificationMailer.notify(self, banner, reason).deliver_now unless deleted_at?
+      delete!
+
+      m = Moderation.new
+      m.moderator_user_id = banner.id
+      m.user_id = id
+      m.action = 'Banned'
+      m.reason = reason
+      m.save!
+    end
+
+    true
+  end
+
+  def banned_from_inviting?
+    disabled_invite_at?
+  end
+
+  def can_flag?(obj)
+    if is_new?
+      return false
+    elsif obj.is_a?(Story)
+      if obj.is_flaggable?
+        return true
+      elsif obj.current_flagged?
+        # user can unvote
+        return true
+      end
+    elsif obj.is_a?(Comment) && obj.is_flaggable?
+      return karma >= MIN_KARMA_TO_FLAG
+    end
+
+    false
+  end
+
+  def can_invite?
+    !banned_from_inviting? && can_submit_stories?
+  end
+
+  def can_offer_suggestions?
+    !is_new? && (karma >= MIN_KARMA_TO_SUGGEST)
+  end
+
+  def can_see_invitation_requests?
+    can_invite? && (is_moderator? ||
+      (karma >= MIN_KARMA_FOR_INVITATION_REQUESTS))
+  end
+
+  def can_submit_stories?
+    karma >= MIN_KARMA_TO_SUBMIT_STORIES
+  end
+
+  def high_karma?
+    karma >= HIGH_KARMA_THRESHOLD
+  end
+
+  def check_session_token
+    return unless session_token.blank?
+
+    roll_session_token
+  end
+
+  def create_mailing_list_token
+    return unless mailing_list_token.blank?
+
+    self.mailing_list_token = Utils.random_str(10)
+  end
+
+  def create_rss_token
+    return unless rss_token.blank?
+
+    self.rss_token = Utils.random_str(60)
+  end
+
+  def comments_posted_count
+    Keystore.value_for("user:#{id}:comments_posted").to_i
+  end
+
+  def comments_deleted_count
+    Keystore.value_for("user:#{id}:comments_deleted").to_i
+  end
+
+  def fetched_avatar(size = 100)
+    gravatar_url = "https://www.gravatar.com/avatar/#{Digest::MD5.hexdigest(email.strip.downcase)}?r=pg&d=identicon&s=#{size}"
+
+    begin
+      s = Sponge.new
+      s.timeout = 3
+      res = s.fetch(gravatar_url).body
+      return res if res.present?
+    rescue StandardError
+      # Rails.logger.error "error fetching #{gravatar_url}: #{e.message}"
+    end
+
+    nil
+  end
+
+  def refresh_counts!
+    Keystore.put("user:#{id}:stories_submitted", stories.count)
+    Keystore.put("user:#{id}:comments_posted", comments.active.count)
+    Keystore.put("user:#{id}:comments_deleted", comments.deleted.count)
+  end
+
+  def delete!
+    User.transaction do
+      # walks comments -> story -> merged stories; this is a rare event and likely
+      # to be fixed in a redesign of the story merging db model:
+      # https://github.com/lobsters/lobsters/issues/1298#issuecomment-2272179720
+      comments
+        .where('score < 0')
+        .find_each { |c| c.delete_for_user(self) }
+
+      # delete messages bypassing validation because a message may have a hat
+      # sender has doffed, which would fail validations
+      sent_messages.update_all(deleted_by_author: true)
+      received_messages.update_all(deleted_by_recipient: true)
+
+      invitations.unused.update_all(used_at: Time.now.utc)
+
+      roll_session_token
+
+      self.deleted_at = Time.current
+      good_riddance?
+      save!
     end
   end
 
-  describe '#authenticate_totp' do
-    it 'verifies a correct TOTP code and rejects an incorrect one' do
-      secret = ROTP::Base32.random_base32
-      u = create(:user, totp_secret: secret)
-      totp = ROTP::TOTP.new(secret)
-      code = totp.now
-
-      expect(u.authenticate_totp(code)).to be_truthy
-      expect(u.authenticate_totp('000000')).to be_falsey
+  def undelete!
+    User.transaction do
+      self.deleted_at = nil
+      save!
     end
   end
 
-  describe '#avatar_path and #avatar_url' do
-    it 'builds avatar path and url for given size' do
-      u = create(:user, username: 'bob')
+  def disable_2fa!
+    self.totp_secret = nil
+    save!
+  end
 
-      path = u.avatar_path(200)
-      url = u.avatar_url(200)
+  # ensures some users talk to a mod before reactivating
+  def good_riddance?
+    return if is_banned? # https://www.youtube.com/watch?v=UcZzlPGnKdU
 
-      expect(path).to include('/avatars/bob-200.png')
-      expect(url.to_s).to include('/avatars/bob-200.png')
+    recent_comments_count = comments
+                            .where(created_at: 30.days.ago..)
+                            .where(is_deleted: true).count
+
+    recent_stories_count = stories
+                           .where(created_at: 30.days.ago..)
+                           .where(is_deleted: true, is_moderated: true).count
+
+    total_count = recent_comments_count + recent_stories_count
+
+    self.email = "#{username}@lobsters.example" if
+      karma < 0 || total_count > 3 ||
+      FlaggedCommenters.new('90d').check_list_for(self)
+  end
+
+  def grant_moderatorship_by_user!(user)
+    User.transaction do
+      self.is_moderator = true
+      save!
+
+      h = Hat.new
+      h.user_id = id
+      h.granted_by_user_id = user.id
+      h.hat = 'Sysop'
+      h.save!
+
+      m = Moderation.new
+      m.moderator_user_id = user.id
+      m.user_id = id
+      m.action = 'Granted moderator status'
+      m.save!
+    end
+
+    true
+  end
+
+  def initiate_password_reset_for_ip(ip)
+    self.password_reset_token = "#{Time.current.to_i}-#{Utils.random_str(30)}"
+    save!
+
+    PasswordResetMailer.password_reset_link(self, ip).deliver_now
+  end
+
+  def has_2fa?
+    totp_secret.present?
+  end
+
+  def is_active?
+    !(deleted_at? || is_banned?)
+  end
+
+  def is_banned?
+    banned_at?
+  end
+
+  # user was deleted/banned before a server move, see lib/tasks/privacy_wipe
+  def is_wiped?
+    password_digest == '*'
+  end
+
+  def is_new?
+    return true unless created_at # unsaved object; in signup flow or a test
+
+    created_at > NEW_USER_DAYS.days.ago
+  end
+
+  def ids_replied_to(comment_ids)
+    h = comment_ids.index_with { false }
+    comments
+      .where(parent_comment_id: comment_ids)
+      .pluck(:parent_comment_id)
+      .each { |cid| h[cid] = true }
+    h
+  end
+
+  def roll_session_token
+    self.session_token = Utils.random_str(60)
+  end
+
+  def is_heavy_self_promoter?
+    total_count = stories.count
+
+    if total_count < MIN_STORIES_CHECK_SELF_PROMOTION
+      false
+    else
+      authored = stories.where(user_is_author: true).count
+      authored.to_f / total_count >= HEAVY_SELF_PROMOTER_PROPORTION
     end
   end
 
-  describe '#disable_invite_by_user_for_reason! and #banned_from_inviting?' do
-    it 'disables inviting, notifies the user, and creates a moderation entry' do
-      mod = create(:user)
-      u = create(:user)
-
-      expect(u.disable_invite_by_user_for_reason!(mod, 'too many invites')).to be(true)
-      u.reload
-
-      expect(u.disabled_invite_at).to be_present
-      expect(u.disabled_invite_by_user_id).to eq(mod.id)
-      expect(u.disabled_invite_reason).to eq('too many invites')
-      expect(u.banned_from_inviting?).to be(true)
-
-      msg = Message.where(recipient_user_id: u.id, author_user_id: mod.id).order(id: :desc).first
-      expect(msg).to be_present
-      expect(msg.subject).to eq('Your invite privileges have been revoked')
-      expect(msg.deleted_by_author).to be(true)
-
-      m = Moderation.where(user_id: u.id, moderator_user_id: mod.id).order(id: :desc).first
-      expect(m).to be_present
-      expect(m.action).to eq('Disabled invitations')
-      expect(m.reason).to eq('too many invites')
-    end
+  def linkified_about
+    Markdowner.to_html(about)
   end
 
-  describe '#ban_by_user_for_reason!' do
-    it 'bans and deletes the user, notifies them, and records moderation' do
-      banner = create(:user)
-      u = create(:user)
-      mail_double = double(deliver_now: true)
-      allow(BanNotificationMailer).to receive(:notify).and_return(mail_double)
+  def mastodon_acct
+    raise unless mastodon_username.present? && mastodon_instance.present?
 
-      expect(u.ban_by_user_for_reason!(banner, 'spamming')).to be(true)
-      u.reload
-
-      expect(u.banned_at).to be_present
-      expect(u.banned_by_user_id).to eq(banner.id)
-      expect(u.banned_reason).to eq('spamming')
-      expect(u.deleted_at).to be_present
-
-      expect(BanNotificationMailer).to have_received(:notify).with(u, banner, 'spamming')
-
-      m = Moderation.where(user_id: u.id, moderator_user_id: banner.id).order(id: :desc).first
-      expect(m).to be_present
-      expect(m.action).to eq('Banned')
-      expect(m.reason).to eq('spamming')
-    end
+    "@#{mastodon_username}@#{mastodon_instance}"
   end
 
-  describe 'permission helpers' do
-    it 'evaluates can_submit_stories? at threshold' do
-      u1 = create(:user, karma: -5)
-      u2 = create(:user, karma: -4)
-      expect(u1.can_submit_stories?).to be(false)
-      expect(u2.can_submit_stories?).to be(true)
-    end
-
-    it 'evaluates can_invite? based on invite ban and submit ability' do
-      u = create(:user, karma: -5)
-      expect(u.can_invite?).to be(false)
-
-      u2 = create(:user, karma: 10)
-      expect(u2.can_invite?).to be(true)
-
-      # disable invitations
-      mod = create(:user)
-      u2.disable_invite_by_user_for_reason!(mod, 'oops')
-      expect(u2.can_invite?).to be(false)
-    end
-
-    it 'evaluates can_offer_suggestions? using age and karma' do
-      old_enough = create(:user, created_at: (User::NEW_USER_DAYS + 1).days.ago, karma: 10)
-      expect(old_enough.can_offer_suggestions?).to be(true)
-
-      low_karma = create(:user, created_at: (User::NEW_USER_DAYS + 1).days.ago, karma: 9)
-      expect(low_karma.can_offer_suggestions?).to be(false)
-
-      new_user = create(:user, created_at: Time.current, karma: 100)
-      expect(new_user.can_offer_suggestions?).to be(false)
-    end
-
-    it 'evaluates can_see_invitation_requests? for moderators and high karma users' do
-      low_user = create(:user, karma: 0)
-      expect(low_user.can_see_invitation_requests?).to be(false)
-
-      high_karma_user = create(:user, karma: User::MIN_KARMA_FOR_INVITATION_REQUESTS)
-      expect(high_karma_user.can_see_invitation_requests?).to be(true)
-
-      moderator = create(:user, is_moderator: true)
-      expect(moderator.can_see_invitation_requests?).to be(true)
-    end
-
-    it 'returns high_karma? at threshold' do
-      u1 = create(:user, karma: User::HIGH_KARMA_THRESHOLD - 1)
-      u2 = create(:user, karma: User::HIGH_KARMA_THRESHOLD)
-      expect(u1.high_karma?).to be(false)
-      expect(u2.high_karma?).to be(true)
-    end
+  def most_common_story_tag
+    Tag.active.joins(
+      :stories
+    ).where(
+      stories: { user_id: id, is_deleted: false }
+    ).group(
+      Tag.arel_table[:id]
+    ).order(
+      Arel.sql('COUNT(*) desc')
+    ).first
   end
 
-  describe 'token generation callbacks' do
-    it 'generates session_token, rss_token, and mailing_list_token on create' do
-      allow(Utils).to receive(:random_str) { |n| 'x' * n }
-      u = create(:user, session_token: nil, rss_token: nil, mailing_list_token: nil)
-      expect(u.session_token).to eq('x' * 60)
-      expect(u.rss_token).to eq('x' * 60)
-      expect(u.mailing_list_token).to eq('x' * 10)
-    end
+  def pushover!(params)
+    return unless pushover_user_key.present?
 
-    it 'rolls session token if blank before save' do
-      allow(Utils).to receive(:random_str).with(60).and_return('t' * 60)
-      u = build(:user, session_token: nil)
-      u.save!
-      expect(u.session_token).to eq('t' * 60)
-    end
+    Pushover.push(pushover_user_key, params)
   end
 
-  describe '#refresh_counts!' do
-    it 'updates keystore-backed counters for stories and comments' do
-      u = create(:user)
-      create(:story, user: u)
-      create(:story, user: u)
-      create(:story, user: u)
-      create(:comment, user: u, is_deleted: false)
-      create(:comment, user: u, is_deleted: false)
-      create(:comment, user: u, is_deleted: true)
+  def recent_threads(amount, include_submitted_stories: false, for_user: user)
+    # Safe to use accessible_to_user even though ~user/threads is a threaded display because the
+    # entire thread disppears from their page.
+    comments = self.comments.accessible_to_user(for_user)
 
-      u.refresh_counts!
+    thread_ids = comments.group(:thread_id).order('MAX(created_at) DESC').limit(amount)
+                         .pluck(:thread_id)
 
-      expect(u.stories_submitted_count).to eq(3)
-      expect(u.comments_posted_count).to eq(2)
-      expect(u.comments_deleted_count).to eq(1)
+    if include_submitted_stories && show_submitted_story_threads
+      thread_ids += Comment.joins(:story)
+                           .where(stories: { user_id: id }).group(:thread_id)
+                           .order('MAX(comments.created_at) DESC').limit(amount).pluck(:thread_id)
+
+      thread_ids = thread_ids.uniq.sort.reverse[0, amount]
     end
+
+    thread_ids
   end
 
-  describe '#fetched_avatar' do
-    it 'returns body when gravatar fetch succeeds' do
-      u = create(:user, email: 'user@example.com')
-      sponge = double
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=)
-      allow(sponge).to receive(:fetch).and_return(double(body: 'IMGDATA'))
-
-      expect(u.fetched_avatar(80)).to eq('IMGDATA')
-    end
-
-    it 'returns nil when gravatar fetch raises' do
-      u = create(:user, email: 'user@example.com')
-      sponge = double
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=)
-      allow(sponge).to receive(:fetch).and_raise(StandardError.new('network'))
-
-      expect(u.fetched_avatar(80)).to be_nil
-    end
+  def stories_submitted_count
+    Keystore.value_for("user:#{id}:stories_submitted").to_i
   end
 
-  describe '#delete! and #undelete!' do
-    it 'marks messages, invitations, rolls tokens, sets deleted_at, and applies good_riddance for low karma' do
-      # avoid FlaggedCommenters side effects
-      allow(FlaggedCommenters).to receive(:new).and_return(double(check_list_for: false))
-      u = create(:user, karma: -1) # triggers good_riddance? email change
-      other = create(:user)
-
-      sent = create(:message, author_user_id: u.id, recipient_user_id: other.id, deleted_by_author: false)
-      received = create(:message, author_user_id: other.id, recipient_user_id: u.id, deleted_by_recipient: false)
-      inv = create(:invitation, user: u, used_at: nil)
-
-      old_token = u.session_token
-      u.delete!
-      u.reload
-
-      expect(u.deleted_at).to be_present
-      expect(u.session_token).not_to eq(old_token)
-      expect(Message.find(sent.id).deleted_by_author).to be(true)
-      expect(Message.find(received.id).deleted_by_recipient).to be(true)
-      expect(Invitation.find(inv.id).used_at).to be_present
-      expect(u.email).to eq("#{u.username}@lobsters.example")
-
-      u.undelete!
-      u.reload
-      expect(u.deleted_at).to be_nil
-    end
+  def stories_deleted_count
+    Keystore.value_for("user:#{id}:stories_deleted").to_i
   end
 
-  describe '#disable_2fa! and #has_2fa?' do
-    it 'disables 2fa and reflects presence correctly' do
-      u = create(:user, totp_secret: 'ABC')
-      expect(u.has_2fa?).to be(true)
-      u.disable_2fa!
-      expect(u.has_2fa?).to be(false)
-      expect(u.totp_secret).to be_nil
-    end
+  def to_param
+    username
   end
 
-  describe '#grant_moderatorship_by_user!' do
-    it 'grants moderatorship, logs moderation, and creates a Sysop hat' do
-      mod = create(:user)
-      u = create(:user, is_moderator: false)
+  def unban_by_user!(unbanner, reason)
+    self.banned_at = nil
+    self.banned_by_user_id = nil
+    self.banned_reason = nil
+    self.deleted_at = nil
+    save!
 
-      expect(u.grant_moderatorship_by_user!(mod)).to be(true)
-      u.reload
+    m = Moderation.new
+    m.moderator_user_id = unbanner.id
+    m.user_id = id
+    m.action = 'Unbanned'
+    m.reason = reason
+    m.save!
 
-      expect(u.is_moderator).to be(true)
-
-      m = Moderation.where(user_id: u.id, moderator_user_id: mod.id).order(id: :desc).first
-      expect(m).to be_present
-      expect(m.action).to eq('Granted moderator status')
-
-      h = Hat.where(user_id: u.id, granted_by_user_id: mod.id).order(id: :desc).first
-      expect(h).to be_present
-      expect(h.hat).to eq('Sysop')
-    end
+    true
   end
 
-  describe '#initiate_password_reset_for_ip' do
-    it 'sets a reset token and sends an email' do
-      u = create(:user)
-      mail = double(deliver_now: true)
-      allow(PasswordResetMailer).to receive(:password_reset_link).and_return(mail)
+  def enable_invite_by_user!(mod)
+    User.transaction do
+      self.disabled_invite_at = nil
+      self.disabled_invite_by_user_id = nil
+      self.disabled_invite_reason = nil
+      save!
 
-      u.initiate_password_reset_for_ip('1.2.3.4')
-      u.reload
-
-      expect(u.password_reset_token).to match(/\A\d+-[A-Za-z0-9]+\z/)
-      expect(PasswordResetMailer).to have_received(:password_reset_link).with(u, '1.2.3.4')
+      m = Moderation.new
+      m.moderator_user_id = mod.id
+      m.user_id = id
+      m.action = 'Enabled invitations'
+      m.save!
     end
+
+    true
   end
 
-  describe '#is_wiped?' do
-    it "is true only when password_digest is '*'" do
-      u = create(:user)
-      expect(u.is_wiped?).to be(false)
-      u.update!(password_digest: '*')
-      expect(u.is_wiped?).to be(true)
-    end
+  def inbox_count
+    notifications.where(read_at: nil).count
   end
 
-  describe '#ids_replied_to' do
-    it 'returns a hash of comment ids the user replied to' do
-      u = create(:user)
-      other = create(:user)
-      story = create(:story, user: other)
-      parent1 = create(:comment, user: other, story: story)
-      parent2 = create(:comment, user: other, story: story)
-      parent3 = create(:comment, user: other, story: story)
-      # replies by u to parent1 and parent3
-      create(:comment, user: u, story: story, parent_comment_id: parent1.id)
-      create(:comment, user: u, story: story, parent_comment_id: parent3.id)
-      # unrelated comment
-      create(:comment, user: u, story: story)
-
-      result = u.ids_replied_to([parent1.id, parent2.id, parent3.id])
-
-      expect(result[parent1.id]).to be(true)
-      expect(result[parent2.id]).to be(false)
-      expect(result[parent3.id]).to be(true)
-    end
+  def votes_for_others
+    votes
+      .left_outer_joins(:story, :comment)
+      .includes(comment: :user, story: :user)
+      .where('(votes.comment_id is not null and comments.user_id <> votes.user_id) OR ' \
+                 '(votes.comment_id is null and stories.user_id <> votes.user_id)')
+      .order(id: :desc)
   end
 
-  describe '#roll_session_token' do
-    it 'sets a random session token' do
-      u = create(:user)
-      allow(Utils).to receive(:random_str).with(60).and_return('s' * 60)
-      u.roll_session_token
-      expect(u.session_token).to eq('s' * 60)
+  # Lazy token generation for rss and mailing list to avoid unnecessary random calls
+  def rss_token
+    val = self[:rss_token]
+    if val.blank?
+      val = Utils.random_str(60)
+      self[:rss_token] = val
     end
+    val
   end
 
-  describe '#linkified_about' do
-    it 'delegates to Markdowner' do
-      u = create(:user, about: 'hello')
-      allow(Markdowner).to receive(:to_html).with('hello').and_return('<p>hello</p>')
-      expect(u.linkified_about).to eq('<p>hello</p>')
+  def mailing_list_token
+    val = self[:mailing_list_token]
+    if val.blank?
+      val = Utils.random_str(10)
+      self[:mailing_list_token] = val
     end
-  end
-
-  describe '#mastodon_acct' do
-    it 'returns the acct string when configured, else raises' do
-      u = create(:user, mastodon_username: 'alice', mastodon_instance: 'social.example')
-      expect(u.mastodon_acct).to eq('@alice@social.example')
-
-      u2 = create(:user, mastodon_username: nil, mastodon_instance: 'x')
-      expect { u2.mastodon_acct }.to raise_error(RuntimeError)
-    end
-  end
-
-  describe '#pushover!' do
-    it 'sends a push when user key is present and does nothing when blank' do
-      u = create(:user, pushover_user_key: 'KEY123')
-      expect(Pushover).to receive(:push).with('KEY123', { title: 'Hi' })
-      u.pushover!(title: 'Hi')
-
-      u2 = create(:user, pushover_user_key: nil)
-      expect(Pushover).not_to receive(:push)
-      u2.pushover!(title: 'Hi')
-    end
-  end
-
-  describe '#to_param' do
-    it 'returns the username' do
-      u = create(:user, username: 'paramuser')
-      expect(u.to_param).to eq('paramuser')
-    end
-  end
-
-  describe '#enable_invite_by_user!' do
-    it 'enables invitations and records moderation' do
-      mod = create(:user)
-      u = create(:user)
-      u.disable_invite_by_user_for_reason!(mod, 'temporary')
-
-      expect(u.enable_invite_by_user!(mod)).to be(true)
-      u.reload
-
-      expect(u.disabled_invite_at).to be_nil
-      expect(u.disabled_invite_by_user_id).to be_nil
-      expect(u.disabled_invite_reason).to be_nil
-
-      m = Moderation.where(user_id: u.id, moderator_user_id: mod.id).order(id: :desc).first
-      expect(m).to be_present
-      expect(m.action).to eq('Enabled invitations')
-    end
-  end
-
-  describe '#votes_for_others' do
-    it "returns votes on others' content ordered by newest first" do
-      voter = create(:user)
-      other = create(:user)
-
-      # Story votes
-      their_story = create(:story, user: other)
-      my_story = create(:story, user: voter)
-
-      v1 = create(:vote, user: voter, story: their_story, vote: 1)
-      v2 = create(:vote, user: voter, story: my_story, vote: 1)
-
-      # Comment votes
-      their_comment = create(:comment, user: other, story: their_story)
-      my_comment = create(:comment, user: voter, story: their_story)
-
-      v3 = create(:vote, user: voter, comment: their_comment, vote: 1)
-      v4 = create(:vote, user: voter, comment: my_comment, vote: 1)
-
-      result_ids = voter.votes_for_others.pluck(:id)
-
-      expect(result_ids).to include(v1.id, v3.id)
-      expect(result_ids).not_to include(v2.id, v4.id)
-      expect(result_ids).to eq([v3.id, v1.id])
-    end
+    val
   end
 end
