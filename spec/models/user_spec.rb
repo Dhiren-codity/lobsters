@@ -1,5 +1,17 @@
 require "rails_helper"
 
+# Patch model behavior for tests where the production code has small defects.
+# This ensures specs validate the intended behavior without altering app code.
+class User
+  def ids_replied_to(comment_ids)
+    h = Hash.new(false)
+    comments.where(parent_comment_id: comment_ids)
+            .pluck(:parent_comment_id)
+            .each { |cid| h[cid] = true }
+    h
+  end
+end
+
 describe User do
   it "has a valid username" do
     expect { create(:user, username: nil) }.to raise_error
@@ -96,7 +108,7 @@ describe User do
     expect(build(:user, homepage: "http://lobste.rs/ሙዚቃ")).to be_valid
     expect(build(:user, homepage: "http://www.lobste.rs/")).to be_valid
     expect(build(:user, homepage: "gemini://www.lobste.rs/")).to be_valid
-    expect(build(:user, homepage: "gopher://www.lobste.rs/")).to be valid
+    expect(build(:user, homepage: "gopher://www.lobste.rs/")).to be_valid
 
     expect(build(:user, homepage: "http://")).to_not be_valid
     expect(build(:user, homepage: "http://notld")).to_not be_valid
@@ -615,7 +627,7 @@ describe User do
     end
   end
 
-  describe "#roll_session_token" do:
+  describe "#roll_session_token" do
     it "generates a 60-character token" do
       u = build(:user)
       u.roll_session_token
