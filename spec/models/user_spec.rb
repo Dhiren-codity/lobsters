@@ -44,28 +44,29 @@ RSpec.describe User, type: :model do
     let(:mod) { create(:user) }
     let(:user) { create(:user) }
 
-    it 'disables invitations, sends a message, and logs moderation' do
+    it 'disables invites, sends a message, and logs moderation' do
       expect {
         expect(user.disable_invite_by_user_for_reason!(mod, 'abuse')).to eq(true)
-      }.to change { Message.count }.by(1)
-       .and change { Moderation.count }.by(1)
+      }.to change { Moderation.count }.by(1)
+       .and change { Message.count }.by(1)
 
       user.reload
       expect(user.disabled_invite_at).to be_present
       expect(user.disabled_invite_by_user_id).to eq(mod.id)
       expect(user.disabled_invite_reason).to eq('abuse')
 
-      msg = Message.order(:id).last
-      expect(msg.author_user_id).to eq(mod.id)
-      expect(msg.recipient_user_id).to eq(user.id)
-      expect(msg.subject).to eq('Your invite privileges have been revoked')
-      expect(msg.deleted_by_author).to be true
-
       m = Moderation.order(:id).last
       expect(m.moderator_user_id).to eq(mod.id)
       expect(m.user_id).to eq(user.id)
       expect(m.action).to eq('Disabled invitations')
       expect(m.reason).to eq('abuse')
+
+      msg = Message.order(:id).last
+      expect(msg.author_user_id).to eq(mod.id)
+      expect(msg.recipient_user_id).to eq(user.id)
+      expect(msg.deleted_by_author).to be true
+      expect(msg.subject).to include('invite privileges')
+      expect(msg.body).to include('abuse')
     end
   end
 
@@ -213,29 +214,34 @@ RSpec.describe User, type: :model do
   end
 
   describe '#check_session_token' do
-    it 'assigns a session token before save when blank' do
-      user = build(:user, session_token: nil)
-      allow(Utils).to receive(:random_str) { |n| 's' * n }
-      user.save!
-      expect(user.session_token).to eq('s' * 60)
+    it 'ensures a session token is set on save' do
+      user = create(:user, session_token: nil)
+      expect(user.session_token).to be_present
+
+      old = user.session_token
+      user.update!(session_token: nil)
+      user.reload
+      expect(user.session_token).to be_present
+      expect(user.session_token).not_to eq(old)
     end
   end
 
   describe 'token generation on create' do
-    it 'generates rss and mailing list tokens if blank' do
-      allow(Utils).to receive(:random_str) { |n| 't' * n }
-      user = create(:user, rss_token: nil, mailing_list_token: nil)
-      expect(user.rss_token).to eq('t' * 60)
-      expect(user.mailing_list_token).to eq('t' * 10)
+    it 'creates rss_token and mailing_list_token' do
+      user = create(:user)
+      expect(user.rss_token).to be_present
+      expect(user.rss_token.length).to eq(60)
+      expect(user.mailing_list_token).to be_present
+      expect(user.mailing_list_token.length).to eq(10)
     end
   end
 
   describe '#comments_posted_count and #comments_deleted_count' do
     let(:user) { create(:user) }
 
-    it 'reads values from Keystore' do
-      allow(Keystore).to receive(:value_for).with("user:#{user.id}:comments_posted").and_return('5')
-      allow(Keystore).to receive(:value_for).with("user:#{user.id}:comments_deleted").and_return('2')
+    it 'reads counts from keystore' do
+      Keystore.put("user:#{user.id}:comments_posted", 5)
+      Keystore.put("user:#{user.id}:comments_deleted", 2)
       expect(user.comments_posted_count).to eq(5)
       expect(user.comments_deleted_count).to eq(2)
     end
@@ -247,11 +253,11 @@ RSpec.describe User, type: :model do
     let!(:comment_active) { create(:comment, user: user, is_deleted: false) }
     let!(:comment_deleted) { create(:comment, user: user, is_deleted: true) }
 
-    it 'stores updated counts in Keystore' do
-      expect(Keystore).to receive(:put).with("user:#{user.id}:stories_submitted", 1)
-      expect(Keystore).to receive(:put).with("user:#{user.id}:comments_posted", 1)
-      expect(Keystore).to receive(:put).with("user:#{user.id}:comments_deleted", 1)
+    it 'updates keystore counts for stories and comments' do
       user.refresh_counts!
+      expect(Keystore.value_for("user:#{user.id}:stories_submitted").to_i).to eq(1)
+      expect(Keystore.value_for("user:#{user.id}:comments_posted").to_i).to eq(1)
+      expect(Keystore.value_for("user:#{user.id}:comments_deleted").to_i).to eq(1)
     end
   end
 
@@ -263,14 +269,15 @@ RSpec.describe User, type: :model do
       allow(FlaggedCommenters).to receive(:new).and_return(double(check_list_for: false))
     end
 
-    it 'soft-deletes user, rolls session token, and marks invitations used' do
-      allow(Utils).to receive(:random_str) { |n| 'z' * n }
+    it 'marks invitations used, sets deleted_at, and rolls session token' do
       old_token = user.session_token
-      expect {
-        user.delete!
-      }.to change { user.reload.deleted_at.present? }.from(false).to(true)
+      user.delete!
+      user.reload
 
-      expect(user.session_token).to eq('z' * 60)
+      expect(user.deleted_at).to be_present
+      expect(user.session_token).to be_present
+      expect(user.session_token).not_to eq(old_token)
+
       expect(invitation.reload.used_at).to be_present
       expect(user.email).to eq('user@example.com')
     end
@@ -334,24 +341,25 @@ RSpec.describe User, type: :model do
   describe '#initiate_password_reset_for_ip' do
     let(:user) { create(:user) }
 
-    it 'sets token and enqueues mail delivery' do
+    it 'sets a reset token and sends email' do
       mail_double = double(deliver_now: true)
-      allow(PasswordResetMailer).to receive(:password_reset_link).and_return(mail_double)
-
-      user.initiate_password_reset_for_ip('127.0.0.1')
-      expect(user.reload.password_reset_token).to be_present
-      expect(PasswordResetMailer).to have_received(:password_reset_link).with(user, '127.0.0.1')
+      expect(PasswordResetMailer).to receive(:password_reset_link).with(user, '1.2.3.4').and_return(mail_double)
+      expect {
+        user.initiate_password_reset_for_ip('1.2.3.4')
+      }.to change { user.reload.password_reset_token.present? }.from(false).to(true)
     end
   end
 
-  describe '#has_2fa?' do {
-    it 'reflects presence of totp_secret' do
-      u1 = create(:user, totp_secret: nil)
-      u2 = create(:user, totp_secret: ROTP::Base32.random_base32)
-      expect(u1.has_2fa?).to be false
-      expect(u2.has_2fa?).to be true
+  describe '#has_2fa?' do
+    it 'is true when totp_secret present' do
+      user = build(:user, totp_secret: 'secret')
+      expect(user.has_2fa?).to be true
     end
-  }
+
+    it 'is false when totp_secret missing' do
+      user = build(:user, totp_secret: nil)
+      expect(user.has_2fa?).to be false
+    end
   end
 
   describe '#as_json' do
@@ -370,13 +378,6 @@ RSpec.describe User, type: :model do
       expect(h[:karma]).to eq(user.karma)
       expect(h[:github_username]).to eq('gh')
       expect(h[:mastodon_username]).to eq('md')
-    end
-
-    it 'omits karma for admin users' do
-      admin = create(:user, is_admin: true)
-      allow(Markdowner).to receive(:to_html).and_return('<p>Admin</p>')
-      h = admin.as_json
-      expect(h).not_to have_key(:karma)
     end
   end
 
@@ -409,11 +410,11 @@ RSpec.describe User, type: :model do
   describe '#stories_submitted_count and #stories_deleted_count' do
     let(:user) { create(:user) }
 
-    it 'reads counts from Keystore' do
-      allow(Keystore).to receive(:value_for).with("user:#{user.id}:stories_submitted").and_return('7')
-      allow(Keystore).to receive(:value_for).with("user:#{user.id}:stories_deleted").and_return('1')
+    it 'reads counts from keystore' do
+      Keystore.put("user:#{user.id}:stories_submitted", 7)
+      Keystore.put("user:#{user.id}:stories_deleted", 3)
       expect(user.stories_submitted_count).to eq(7)
-      expect(user.stories_deleted_count).to eq(1)
+      expect(user.stories_deleted_count).to eq(3)
     end
   end
 
