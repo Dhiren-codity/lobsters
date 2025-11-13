@@ -578,7 +578,7 @@ RSpec.describe User, type: :model do
     end
   end
 
-  describe '#most_common_story_tag' do:
+  describe '#most_common_story_tag' do
     it 'returns the tag used most often on user stories' do
       user = create(:user)
       tag1 = create(:tag)
