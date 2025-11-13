@@ -457,7 +457,7 @@ describe User do
     end
   end
 
-  describe "#fetched_avatar" do:
+  describe "#fetched_avatar" do
     it "returns body when fetch succeeds" do
       user = create(:user, email: "user@example.com")
       sponge = double("Sponge")
