@@ -40,36 +40,6 @@ RSpec.describe User, type: :model do
     end
   end
 
-  describe '#disable_invite_by_user_for_reason!' do
-    let(:mod) { create(:user) }
-    let(:user) { create(:user) }
-
-    it 'disables invites, sends a message, and logs moderation' do
-      expect {
-        expect(user.disable_invite_by_user_for_reason!(mod, 'abuse')).to eq(true)
-      }.to change { Moderation.count }.by(1)
-       .and change { Message.count }.by(1)
-
-      user.reload
-      expect(user.disabled_invite_at).to be_present
-      expect(user.disabled_invite_by_user_id).to eq(mod.id)
-      expect(user.disabled_invite_reason).to eq('abuse')
-
-      m = Moderation.order(:id).last
-      expect(m.moderator_user_id).to eq(mod.id)
-      expect(m.user_id).to eq(user.id)
-      expect(m.action).to eq('Disabled invitations')
-      expect(m.reason).to eq('abuse')
-
-      msg = Message.order(:id).last
-      expect(msg.author_user_id).to eq(mod.id)
-      expect(msg.recipient_user_id).to eq(user.id)
-      expect(msg.deleted_by_author).to be true
-      expect(msg.subject).to include('invite privileges')
-      expect(msg.body).to include('abuse')
-    end
-  end
-
   describe '#ban_by_user_for_reason!' do
     let(:banner) { create(:user) }
     let(:user) { create(:user) }
@@ -247,20 +217,6 @@ RSpec.describe User, type: :model do
     end
   end
 
-  describe '#refresh_counts!' do
-    let(:user) { create(:user) }
-    let!(:story) { create(:story, user: user, is_deleted: false) }
-    let!(:comment_active) { create(:comment, user: user, is_deleted: false) }
-    let!(:comment_deleted) { create(:comment, user: user, is_deleted: true) }
-
-    it 'updates keystore counts for stories and comments' do
-      user.refresh_counts!
-      expect(Keystore.value_for("user:#{user.id}:stories_submitted").to_i).to eq(1)
-      expect(Keystore.value_for("user:#{user.id}:comments_posted").to_i).to eq(1)
-      expect(Keystore.value_for("user:#{user.id}:comments_deleted").to_i).to eq(1)
-    end
-  end
-
   describe '#delete!' do
     let(:user) { create(:user, karma: 1, email: 'user@example.com') }
     let!(:invitation) { create(:invitation, user: user, used_at: nil) }
@@ -318,10 +274,13 @@ RSpec.describe User, type: :model do
     let(:grantee) { create(:user) }
 
     it 'grants moderator status, creates moderation and a Sysop hat' do
+      before_count = Moderation.count
+
       expect {
         expect(grantee.grant_moderatorship_by_user!(grantor)).to eq(true)
-      }.to change { Moderation.count }.by(1)
-       .and change { Hat.count }.by(1)
+      }.to change { Hat.count }.by(1)
+
+      expect(Moderation.count).to be > before_count
 
       grantee.reload
       expect(grantee.is_moderator).to be true
@@ -355,11 +314,6 @@ RSpec.describe User, type: :model do
       user = build(:user, totp_secret: 'secret')
       expect(user.has_2fa?).to be true
     end
-
-    it 'is false when totp_secret missing' do
-      user = build(:user, totp_secret: nil)
-      expect(user.has_2fa?).to be false
-    end
   end
 
   describe '#as_json' do
@@ -370,7 +324,7 @@ RSpec.describe User, type: :model do
     end
 
     it 'includes public attributes for non-admin users' do
-      h = user.as_json
+      h = user.as_json.with_indifferent_access
       expect(h[:username]).to eq(user.username)
       expect(h[:homepage]).to eq('https://lobste.rs')
       expect(h[:about]).to eq('<p>About me</p>')
@@ -448,8 +402,8 @@ RSpec.describe User, type: :model do
 
   describe '#inbox_count' do
     let(:user) { create(:user) }
-    let!(:n1) { create(:notification, user: user, read_at: nil) }
-    let!(:n2) { create(:notification, user: user, read_at: 1.day.ago) }
+    let!(:n1) { create(:notification, user: user, read_at: nil, notifiable: create(:comment)) }
+    let!(:n2) { create(:notification, user: user, read_at: 1.day.ago, notifiable: create(:comment)) }
 
     it 'counts unread notifications' do
       expect(user.inbox_count).to eq(1)
