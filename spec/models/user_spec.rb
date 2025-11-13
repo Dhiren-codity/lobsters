@@ -267,7 +267,7 @@ RSpec.describe User, type: :model do
       expect(h).not_to have_key(:karma)
       expect(h[:about]).to eq('html')
       expect(h[:avatar_url]).to eq('url')
-    end }
+    end
   end
 
   describe '#authenticate_totp' do
