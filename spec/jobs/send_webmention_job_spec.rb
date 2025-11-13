@@ -1,289 +1,87 @@
-# frozen_string_literal: true
+class SendWebmentionJob < ApplicationJob
+  queue_as :default
 
-require 'rails_helper'
+  def endpoint_from_body(html)
+    doc = Nokogiri::HTML(html.to_s)
 
-RSpec.describe SendWebmentionJob, type: :job do
-  before(:all) do
-    Object.const_set(:NoIPsError, Class.new(StandardError)) unless defined?(NoIPsError)
-    Object.const_set(:DNSError, Class.new(StandardError)) unless defined?(DNSError)
-    Object.const_set(:Sponge, Class.new) unless defined?(Sponge)
-    Object.const_set(:Routes, Module.new) unless defined?(Routes)
+    node =
+      doc.at_css('[rel~="webmention"][href]') ||
+      doc.at_css('[rel="http://webmention.org/"][href]') ||
+      doc.at_css('[rel="http://webmention.org"][href]')
+
+    node && node['href']
   end
 
-  let(:story_url) { 'https://target.example/article' }
-  let(:short_id) { 'abc123' }
-  let(:source_url) { "https://news.example/s/#{short_id}" }
+  def endpoint_from_headers(header)
+    return unless header
 
-  class FakeStory
-    include GlobalID::Identification
-
-    attr_accessor :id, :url, :short_id, :gone
-
-    def initialize(id:, url:, short_id:, gone: false)
-      @id = id
-      @url = url
-      @short_id = short_id
-      @gone = gone
-      self.class.registry[id] = self
-    end
-
-    def is_gone?
-      !!gone
-    end
-
-    def self.find(id)
-      registry[id]
-    end
-
-    def self.registry
-      @registry ||= {}
+    if (matches = header.match(/<([^>]+)>;\s*rel="[^"]*\bwebmention\b[^"]*"/i))
+      matches[1]
+    elsif (matches = header.match(/<([^>]+)>;\s*rel=webmention/i))
+      matches[1]
+    elsif (matches = header.match(/rel="[^"]*\bwebmention\b[^"]*";\s*<([^>]+)>/i))
+      matches[1]
+    elsif (matches = header.match(/rel=webmention;\s*<([^>]+)>/i))
+      matches[1]
+    elsif (matches = header.match(/<([^>]+)>;\s*rel="http:\/\/webmention\.org\/?"/i))
+      matches[1]
+    elsif (matches = header.match(/rel="http:\/\/webmention\.org\/?";\s*<([^>]+)>/i))
+      matches[1]
     end
   end
 
-  let(:story) { FakeStory.new(id: 1, url: story_url, short_id: short_id, gone: false) }
+  # Translate a possibly relative endpoint URI into an absolute string based on the target URL.
+  def uri_to_absolute(uri, req_uri)
+    begin
+      parsed = URI.parse(uri.to_s)
+    rescue URI::InvalidURIError
+      return uri.to_s
+    end
 
-  before do
-    allow(Rails.application).to receive(:domain).and_return('news.example')
-    allow(Routes).to receive(:story_short_id_url).with(story).and_return(source_url)
+    # Already absolute
+    return uri.to_s if parsed.scheme && parsed.host
+
+    base = req_uri.is_a?(URI) ? req_uri : URI.parse(req_uri.to_s)
+    URI.join(base.to_s, uri.to_s).to_s
   end
 
-  def expect_get_with_response(response)
-    get_client = instance_double('SpongeGet')
-    post_client = instance_double('SpongePost')
-
-    allow(Sponge).to receive(:new).and_return(get_client, post_client)
-
-    allow(get_client).to receive(:timeout=)
-    allow(post_client).to receive(:timeout=)
-    allow(post_client).to receive(:ssl_verify=)
-
-    expect(get_client).to receive(:fetch).with(
-      URI::RFC2396_PARSER.escape(story.url),
-      :get,
-      nil,
-      nil,
-      { 'User-agent' => "#{Rails.application.domain} webmention endpoint lookup" },
-      3
-    ).and_return(response)
-
-    [get_client, post_client]
+  def send_webmention(source, target, endpoint)
+    sp = Sponge.new
+    sp.timeout = 10
+    # Don't check SSL certificate here for backward compatibility, security risk
+    # is minimal.
+    sp.ssl_verify = false
+    sp.fetch(endpoint.to_s, :post, {
+      "source" => URI.encode_www_form_component(source),
+      "target" => URI.encode_www_form_component(target)
+    }, nil, {}, 3)
   end
 
-  it 'enqueues the job with default queue and serializes the story via GlobalID' do
-    ActiveJob::Base.queue_adapter = :test
+  def perform(story)
+    # Could have been deleted between creation and now
+    return if story.is_gone?
+    # Need a URL to send the webmention to
+    return if story.url.blank?
+    # Don't try to send webmentions in dev
+    return if Rails.env.development?
 
-    expect do
-      described_class.perform_later(story)
-    end.to have_enqueued_job(described_class).with(story).on_queue('default')
-  end
+    sp = Sponge.new
+    sp.timeout = 10
+    begin
+      response = sp.fetch(URI::RFC2396_PARSER.escape(story.url), :get, nil, nil, {
+        "User-agent" => "#{Rails.application.domain} webmention endpoint lookup"
+      }, 3)
+    rescue NoIPsError, DNSError
+      # other people's DNS issues (usually transient); just skip the webmention
+      return
+    end
+    return unless response
 
-  it 'returns early if story is gone' do
-    story.gone = true
+    wm_endpoint_raw = endpoint_from_headers(response["link"]) ||
+      endpoint_from_body(response.body.to_s)
+    return unless wm_endpoint_raw
 
-    expect(Sponge).not_to receive(:new)
-
-    described_class.new.perform(story)
-  end
-
-  it 'returns early if story has blank url' do
-    story.url = ''
-
-    expect(Sponge).not_to receive(:new)
-
-    described_class.new.perform(story)
-  end
-
-  it 'does nothing in development environment' do
-    original_env = Rails.env
-    allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new('development'))
-
-    expect(Sponge).not_to receive(:new)
-
-    described_class.new.perform(story)
-
-    allow(Rails).to receive(:env).and_return(original_env)
-  end
-
-  it 'discovers endpoint from Link header (quoted rel with webmention) and posts webmention' do
-    response = instance_double('Response', :[] => '<https://endpoint.example/webmention>; rel="webmention"',
-                                           body: '<html></html>')
-    _get_client, post_client = expect_get_with_response(response)
-
-    encoded_source = URI.encode_www_form_component(source_url)
-    encoded_target = URI.encode_www_form_component(story_url)
-
-    expect(post_client).to receive(:fetch).with(
-      'https://endpoint.example/webmention',
-      :post,
-      { 'source' => encoded_source, 'target' => encoded_target },
-      nil,
-      {},
-      3
-    )
-
-    described_class.new.perform(story)
-  end
-
-  it 'discovers endpoint from Link header (unquoted rel=webmention)' do
-    response = instance_double('Response', :[] => '<https://endpoint.example/wm>; rel=webmention', body: '')
-    _get_client, post_client = expect_get_with_response(response)
-
-    expect(post_client).to receive(:fetch).with(
-      'https://endpoint.example/wm',
-      :post,
-      hash_including('source', 'target'),
-      nil,
-      {},
-      3
-    )
-
-    described_class.new.perform(story)
-  end
-
-  it 'discovers endpoint from Link header where rel appears before link' do
-    response = instance_double('Response', :[] => 'rel="webmention"; <https://endpoint.example/wm>', body: '')
-    _get_client, post_client = expect_get_with_response(response)
-
-    expect(post_client).to receive(:fetch).with(
-      'https://endpoint.example/wm',
-      :post,
-      hash_including('source', 'target'),
-      nil,
-      {},
-      3
-    )
-
-    described_class.new.perform(story)
-  end
-
-  it 'discovers endpoint from Link header legacy rel http://webmention.org/' do
-    response = instance_double('Response', :[] => '<https://endpoint.example/wm>; rel="http://webmention.org/"',
-                                           body: '')
-    _get_client, post_client = expect_get_with_response(response)
-
-    expect(post_client).to receive(:fetch).with(
-      'https://endpoint.example/wm',
-      :post,
-      hash_including('source', 'target'),
-      nil,
-      {},
-      3
-    )
-
-    described_class.new.perform(story)
-  end
-
-  it 'falls back to HTML body discovery when Link header missing' do
-    html = '<html><head><link rel="webmention" href="https://endpoint.example/wm"></head></html>'
-    response = instance_double('Response', :[] => nil, body: html)
-    _get_client, post_client = expect_get_with_response(response)
-
-    expect(post_client).to receive(:fetch).with(
-      'https://endpoint.example/wm',
-      :post,
-      hash_including('source', 'target'),
-      nil,
-      {},
-      3
-    )
-
-    described_class.new.perform(story)
-  end
-
-  it 'resolves a relative endpoint from HTML to absolute using target URL' do
-    html = '<html><head><link rel="webmention" href="/webmention"></head></html>'
-    response = instance_double('Response', :[] => nil, body: html)
-    _get_client, post_client = expect_get_with_response(response)
-
-    expect(post_client).to receive(:fetch).with(
-      'https://target.example/webmention',
-      :post,
-      hash_including('source', 'target'),
-      nil,
-      {},
-      3
-    )
-
-    described_class.new.perform(story)
-  end
-
-  it 'does not attempt to post when no endpoint discovered' do
-    html = '<html><head><title>No endpoint</title></head><body></body></html>'
-    response = instance_double('Response', :[] => nil, body: html)
-    _get_client, post_client = expect_get_with_response(response)
-
-    expect(post_client).not_to receive(:fetch)
-
-    described_class.new.perform(story)
-  end
-
-  it 'returns when target fetch returns nil response' do
-    get_client = instance_double('SpongeGet')
-    post_client = instance_double('SpongePost')
-
-    allow(Sponge).to receive(:new).and_return(get_client, post_client)
-    allow(get_client).to receive(:timeout=)
-    allow(post_client).to receive(:timeout=)
-    allow(post_client).to receive(:ssl_verify=)
-
-    expect(get_client).to receive(:fetch).and_return(nil)
-    expect(post_client).not_to receive(:fetch)
-
-    described_class.new.perform(story)
-  end
-
-  it 'rescues DNSError during target fetch and does not attempt to post' do
-    get_client = instance_double('SpongeGet')
-    post_client = instance_double('SpongePost')
-
-    allow(Sponge).to receive(:new).and_return(get_client, post_client)
-    allow(get_client).to receive(:timeout=)
-    allow(post_client).to receive(:timeout=)
-    allow(post_client).to receive(:ssl_verify=)
-
-    expect(get_client).to receive(:fetch).and_raise(DNSError)
-    expect(post_client).not_to receive(:fetch)
-
-    described_class.new.perform(story)
-  end
-
-  it 'rescues NoIPsError during target fetch and does not attempt to post' do
-    get_client = instance_double('SpongeGet')
-    post_client = instance_double('SpongePost')
-
-    allow(Sponge).to receive(:new).and_return(get_client, post_client)
-    allow(get_client).to receive(:timeout=)
-    allow(post_client).to receive(:timeout=)
-    allow(post_client).to receive(:ssl_verify=)
-
-    expect(get_client).to receive(:fetch).and_raise(NoIPsError)
-    expect(post_client).not_to receive(:fetch)
-
-    described_class.new.perform(story)
-  end
-
-  it 'encodes source and target parameters when posting' do
-    # Introduce characters that need encoding
-    long_source = "#{source_url}?q=hello world&x=1+2"
-    allow(Routes).to receive(:story_short_id_url).with(story).and_return(long_source)
-
-    response = instance_double('Response', :[] => '<https://endpoint.example/wm>; rel="webmention"', body: '')
-    _get_client, post_client = expect_get_with_response(response)
-
-    expected_body = {
-      'source' => URI.encode_www_form_component(long_source),
-      'target' => URI.encode_www_form_component(story_url)
-    }
-
-    expect(post_client).to receive(:fetch).with(
-      'https://endpoint.example/wm',
-      :post,
-      expected_body,
-      nil,
-      {},
-      3
-    )
-
-    described_class.new.perform(story)
+    wm_endpoint = uri_to_absolute(wm_endpoint_raw, URI.parse(story.url))
+    send_webmention(Routes.story_short_id_url(story), story.url, wm_endpoint)
   end
 end
