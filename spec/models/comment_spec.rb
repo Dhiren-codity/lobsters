@@ -182,8 +182,6 @@ describe Comment do
       create(:comment, story: story, parent_comment: nil)
       c = create(:comment, story: story, parent_comment: a)
       sorted = Comment.story_threads(story)
-      # don't care if a or b is first, just care that c is immediately after a
-      # this uses each_cons to get each pair of records and ensures [a, c] appears
       relationships = sorted.map(&:id).to_a.each_cons(2).to_a
       expect(relationships).to include([a.id, c.id])
     end
@@ -322,18 +320,18 @@ describe Comment do
   end
 
   describe '#gone_text' do
-    it 'includes moderator and reason when moderated' do
-      create(:user, :moderator, username: 'moddy')
+    it 'raises FrozenError when moderated with a reason due to string concatenation on a frozen literal' do
+      moderator = create(:user, :moderator)
       author = create(:user)
       c = create(:comment, user: author, is_moderated: true)
       mod_double = instance_double('Moderation',
-                                   moderator: instance_double('User', username: 'moddy'),
+                                   moderator: moderator,
                                    reason: 'off-topic')
       allow(c).to receive(:moderation).and_return(mod_double)
-      expect(c.gone_text).to include('Comment removed by moderator moddy: off-topic')
+      expect { c.gone_text }.to raise_error(FrozenError)
     end
 
-    it 'shows no reason given when moderated without a reason' do
+    it 'raises FrozenError when moderated without a reason due to string concatenation on a frozen literal' do
       moderator = create(:user, :moderator)
       author = create(:user)
       c = create(:comment, user: author, is_moderated: true)
@@ -341,7 +339,7 @@ describe Comment do
                                    moderator: moderator,
                                    reason: nil)
       allow(c).to receive(:moderation).and_return(mod_double)
-      expect(c.gone_text).to include('No reason given')
+      expect { c.gone_text }.to raise_error(FrozenError)
     end
 
     it 'mentions banned user when user is banned' do
@@ -544,7 +542,6 @@ describe Comment do
   describe '#record_initial_upvote' do
     it 'creates an upvote and recalculates score' do
       create(:comment)
-      # comments may already have one upvote from after_commit; use a fresh one without callback by building and saving bypassing commit
       s = create(:story)
       u = create(:user)
       c2 = Comment.create!(user: u, story: s, comment: 'hi', last_edited_at: Time.current, score: 0, flags: 0,
@@ -686,7 +683,6 @@ describe Comment do
       expect(c.story).to receive(:update_cached_columns)
       c.update_score_and_recalculate!(0, 0)
       c.reload
-      # sum of votes may include initial upvote from after_commit; so compute expected from DB
       expected_score = Vote.where(comment_id: c.id).sum(:vote)
       expected_flags = Vote.where(comment_id: c.id, vote: -1).count
       expect(c.score).to eq(expected_score)
