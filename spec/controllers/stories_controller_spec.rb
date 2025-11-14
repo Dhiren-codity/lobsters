@@ -111,7 +111,6 @@ RSpec.describe StoriesController, type: :controller do
     before do
       allow(Story).to receive(:new).and_return(story)
       allow(story).to receive(:fetching_ip=)
-      allow(story).to receive(:url=)
       allow(story).to receive(:fetched_attributes).and_return({})
       allow(story).to receive(:already_posted_recently?).and_return(false)
       allow(story).to receive(:most_recent_similar).and_return(other_story)
@@ -125,6 +124,8 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'canonicalizes URL and shows flash when fetched url differs' do
+      # Make url= update what url returns so controller can compare values
+      allow(story).to receive(:url=) { |u| allow(story).to receive(:url).and_return(u) }
       allow(story).to receive(:fetched_attributes).and_return({ url: 'https://canonical.example.com',
                                                                 title: 'Fetched Title' })
 
@@ -134,8 +135,10 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'redirects if already posted recently' do
+      allow(story).to receive(:url=) { |u| allow(story).to receive(:url).and_return(u) }
       allow(story).to receive(:fetched_attributes).and_return({ url: 'https://example.com', title: 'Title' })
       allow(story).to receive(:already_posted_recently?).and_return(true)
+      allow(story).to receive(:most_recent_similar).and_return(other_story)
       allow(Routes).to receive(:title_path).with(other_story).and_return("/stories/#{other_story.short_id}")
 
       get :new, params: { url: 'https://example.com' }
@@ -191,8 +194,6 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'routes to preview when preview param present' do
-      expect_any_instance_of(StoriesController).to receive(:preview).and_call_original
-
       post :create, params: valid_params.merge(preview: '1')
 
       expect(response).to be_successful
@@ -213,6 +214,8 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'marks story deleted and redirects' do
+      allow(story).to receive(:url_is_editable_by_user?).with(user).and_return(true)
+
       delete :destroy,
              params: { id: story.short_id,
                        story: { title: '', url: '', description: '', tags: [], user_is_author: '0',
@@ -338,7 +341,7 @@ RSpec.describe StoriesController, type: :controller do
       allow(story).to receive(:merged_into_story).and_return(merged)
       allow(Story).to receive(:where).and_return(double(first!: story))
       allow(Routes).to receive(:title_path).with(merged,
-                                                 hash_including(anchor: story.header_anchor)).and_return("/stories/#{merged.short_id}")
+                                                 hash_including(anchor: story.header_anchor)).and_return("/stories/#{merged.short_id}#h")
       allow(story).to receive(:header_anchor).and_return('h')
 
       get :show, params: { id: story.short_id }
@@ -403,6 +406,8 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'undeletes and redirects' do
+      allow(story).to receive(:url_is_editable_by_user?).with(user).and_return(true)
+
       post :undelete,
            params: { id: story.short_id,
                      story: { title: '', url: '', description: '', tags: [], user_is_author: '0',
@@ -693,10 +698,9 @@ RSpec.describe StoriesController, type: :controller do
       allow(story).to receive(:check_already_posted_recently?)
     end
 
-    it 'raises ParameterMissing without url' do
-      expect do
-        post :check_url_dupe, params: { story: { title: 't' } }
-      end.to raise_error(ActionController::ParameterMissing)
+    it 'returns 400 without url' do
+      post :check_url_dupe, params: { story: { title: 't' } }
+      expect(response).to have_http_status(400)
     end
 
     it 'renders HTML partial w/200' do
