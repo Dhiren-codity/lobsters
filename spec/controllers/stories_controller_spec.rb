@@ -29,15 +29,14 @@ RSpec.describe StoriesController, type: :controller do
   end
 
   let(:merged_scope) do
-    double(
-      not_deleted: merged_scope,
-      mod_single_preload?: merged_scope,
-      for_presentation: merged_scope,
-      includes: merged_scope,
-      ids: [2],
-      pluck: [2],
-      push: [2, 1]
-    )
+    ds = double('merged_scope')
+    allow(ds).to receive(:not_deleted).and_return(ds)
+    allow(ds).to receive(:mod_single_preload?).and_return(ds)
+    allow(ds).to receive(:for_presentation).and_return(ds)
+    allow(ds).to receive(:includes).and_return(ds)
+    allow(ds).to receive(:ids).and_return([2])
+    allow(ds).to receive(:pluck).and_return([2])
+    ds
   end
 
   let(:story_user) { double(id: 10, mastodon_username: nil, mastodon_acct: nil) }
@@ -329,6 +328,7 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'redirects to merged story for HTML' do
+      controller.instance_variable_set(:@user, nil)
       merged = other_story
       allow(story).to receive(:merged_into_story).and_return(merged)
       allow(Story).to receive(:where).and_return(double(first!: story))
@@ -343,6 +343,7 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'redirects to merged story for JSON' do
+      controller.instance_variable_set(:@user, nil)
       merged = other_story
       allow(story).to receive(:merged_into_story).and_return(merged)
       allow(Story).to receive(:where).and_return(double(first!: story))
@@ -353,12 +354,14 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'redirects when title slug mismatches' do
+      controller.instance_variable_set(:@user, nil)
       allow(Story).to receive(:where).and_return(double(first!: story))
       get :show, params: { id: story.short_id, title: 'wrong-title' }
       expect(response).to redirect_to("/stories/#{story.short_id}")
     end
 
     it 'renders 404 for gone and not visible (HTML)' do
+      controller.instance_variable_set(:@user, nil)
       allow(story).to receive(:is_gone?).and_return(true)
       allow(story).to receive(:can_be_seen_by_user?).with(user).and_return(false)
       allow(Moderation).to receive_message_chain(:where, :where, :order, :first).and_return(nil)
@@ -370,6 +373,7 @@ RSpec.describe StoriesController, type: :controller do
     end
 
     it 'raises not found for JSON when not visible' do
+      controller.instance_variable_set(:@user, nil)
       allow(story).to receive(:is_gone?).and_return(false)
       allow(story).to receive(:can_be_seen_by_user?).with(user).and_return(false)
       allow(Story).to receive(:where).and_return(double(first!: story))
