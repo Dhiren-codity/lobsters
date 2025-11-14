@@ -11,6 +11,7 @@ RSpec.describe SendWebmentionJob, type: :job do
     allow(Rails).to receive_message_chain(:application, :domain).and_return('example.test')
     stub_const('Routes', Class.new)
     allow(Routes).to receive(:story_short_id_url).and_return('https://example.test/s/abc')
+    stub_const('Sponge', Class.new)
   end
 
   describe '#perform' do
@@ -47,9 +48,13 @@ RSpec.describe SendWebmentionJob, type: :job do
     end
 
     context 'when DNS errors occur' do
-      it 'rescues NoIPsError and does not raise' do
+      before do
         stub_const('NoIPsError', Class.new(StandardError))
-        sponge = instance_double('Sponge', timeout: nil)
+        stub_const('DNSError', Class.new(StandardError))
+      end
+
+      it 'rescues NoIPsError and does not raise' do
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         expect(sponge).to receive(:fetch).and_raise(NoIPsError)
@@ -60,8 +65,7 @@ RSpec.describe SendWebmentionJob, type: :job do
       end
 
       it 'rescues DNSError and does not raise' do
-        stub_const('DNSError', Class.new(StandardError))
-        sponge = instance_double('Sponge', timeout: nil)
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         expect(sponge).to receive(:fetch).and_raise(DNSError)
@@ -74,7 +78,7 @@ RSpec.describe SendWebmentionJob, type: :job do
 
     context 'when a non-rescued error occurs' do
       it 'raises the error (to allow retry mechanisms)' do
-        sponge = instance_double('Sponge', timeout: nil)
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         expect(sponge).to receive(:fetch).and_raise(StandardError)
@@ -87,7 +91,7 @@ RSpec.describe SendWebmentionJob, type: :job do
 
     context 'when no response is returned' do
       it 'does not attempt to send a webmention' do
-        sponge = instance_double('Sponge', timeout: nil)
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         expect(sponge).to receive(:fetch).and_return(nil)
@@ -99,11 +103,11 @@ RSpec.describe SendWebmentionJob, type: :job do
 
     context 'when no endpoint can be discovered' do
       it 'does not attempt to send a webmention' do
-        response = instance_double('Response')
+        response = double('Response')
         allow(response).to receive(:[]).with('link').and_return(nil)
         allow(response).to receive(:body).and_return('<html><head></head><body>No endpoint here</body></html>')
 
-        sponge = instance_double('Sponge', timeout: nil)
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         expect(sponge).to receive(:fetch).and_return(response)
@@ -116,11 +120,11 @@ RSpec.describe SendWebmentionJob, type: :job do
     context 'when endpoint is found in Link headers' do
       it 'calls send_webmention with header endpoint' do
         link_header = '<https://endpoint.example/webmention>; rel="webmention"'
-        response = instance_double('Response')
+        response = double('Response')
         allow(response).to receive(:[]).with('link').and_return(link_header)
         allow(response).to receive(:body).and_return('<html></html>')
 
-        sponge = instance_double('Sponge', timeout: nil)
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         allow(sponge).to receive(:fetch).and_return(response)
@@ -138,11 +142,11 @@ RSpec.describe SendWebmentionJob, type: :job do
     context 'when endpoint is found in HTML body as relative link' do
       it 'resolves the endpoint to an absolute URI and sends' do
         html = '<html><head><link rel="webmention" href="/wm"></head><body></body></html>'
-        response = instance_double('Response')
+        response = double('Response')
         allow(response).to receive(:[]).with('link').and_return(nil)
         allow(response).to receive(:body).and_return(html)
 
-        sponge = instance_double('Sponge', timeout: nil)
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         allow(sponge).to receive(:fetch).and_return(response)
@@ -160,11 +164,11 @@ RSpec.describe SendWebmentionJob, type: :job do
     context 'idempotency' do
       it 'can be performed multiple times without crashing and repeats the call' do
         link_header = '<https://endpoint.example/wm>; rel="webmention"'
-        response = instance_double('Response')
+        response = double('Response')
         allow(response).to receive(:[]).with('link').and_return(link_header)
         allow(response).to receive(:body).and_return('<html></html>')
 
-        sponge = instance_double('Sponge', timeout: nil)
+        sponge = double('Sponge', timeout: nil)
         allow(Sponge).to receive(:new).and_return(sponge)
         allow(sponge).to receive(:timeout=).with(10)
         allow(sponge).to receive(:fetch).and_return(response)
@@ -187,7 +191,7 @@ RSpec.describe SendWebmentionJob, type: :job do
         'target' => URI.encode_www_form_component(target)
       }
 
-      sponge = instance_double('Sponge')
+      sponge = double('Sponge')
       allow(Sponge).to receive(:new).and_return(sponge)
       expect(sponge).to receive(:timeout=).with(10)
       expect(sponge).to receive(:ssl_verify=).with(false)
