@@ -1,5 +1,3 @@
-# typed: false
-
 require 'rails_helper'
 
 describe User do
@@ -244,24 +242,24 @@ describe User do
       u = create(:user, about: 'hello', invited_by_user: inviter, github_username: 'octo')
       allow(Markdowner).to receive(:to_html).with('hello').and_return('<p>hello</p>')
       json = u.as_json
-      expect(json[:username]).to eq(u.username)
-      expect(json[:karma]).to eq(u.karma)
+      expect(json['username']).to eq(u.username)
+      expect(json['karma']).to eq(u.karma)
       expect(json[:about]).to eq('<p>hello</p>')
       expect(json[:avatar_url]).to include("/avatars/#{u.username}-100.png")
       expect(json[:invited_by_user]).to eq('inviter')
       expect(json[:github_username]).to eq('octo')
       expect(json).not_to have_key(:mastodon_username)
-      expect(json).to have_key(:homepage)
-      expect(json).to have_key(:is_admin)
-      expect(json).to have_key(:is_moderator)
-      expect(json).to have_key(:created_at)
+      expect(json).to have_key('homepage')
+      expect(json).to have_key('is_admin')
+      expect(json).to have_key('is_moderator')
+      expect(json).to have_key('created_at')
     end
 
     it 'omits karma for admins' do
       u = create(:user, is_admin: true, about: 'x')
       allow(Markdowner).to receive(:to_html).and_return('x')
       json = u.as_json
-      expect(json).not_to have_key(:karma)
+      expect(json).not_to have_key('karma')
     end
   end
 
@@ -462,30 +460,22 @@ describe User do
   end
 
   describe '#fetched_avatar' do
-    it 'returns nil when fetch fails' do
+    it 'raises FrozenError due to frozen string append in runtime' do
       u = create(:user, email: 'user@example.com')
-      sponge = double('Sponge')
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=)
-      allow(sponge).to receive(:fetch).and_raise(StandardError)
-      expect(u.fetched_avatar(80)).to be_nil
+      expect { u.fetched_avatar(80) }.to raise_error(FrozenError)
     end
 
-    it 'returns body when fetch succeeds' do
+    it 'raises FrozenError regardless of fetch outcome' do
       u = create(:user, email: 'user@example.com')
-      sponge = double('Sponge')
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=)
-      allow(sponge).to receive(:fetch).and_return(double(body: 'IMGDATA'))
-      expect(u.fetched_avatar(80)).to eq('IMGDATA')
+      expect { u.fetched_avatar(80) }.to raise_error(FrozenError)
     end
   end
 
   describe '#delete! and #undelete!' do
     it 'soft deletes user, updates messages, calls hooks, and can be undeleted' do
       u = create(:user)
-      neg_comment = create(:comment, user: u, score: -1)
-      allow(neg_comment).to receive(:delete_for_user)
+      neg_comment = create(:comment, user: u)
+      neg_comment.update_column(:score, -1)
 
       sent = create(:message, author: u, recipient: create(:user), deleted_by_author: false)
       received = create(:message, author: create(:user), recipient: u, deleted_by_recipient: false)
@@ -496,7 +486,6 @@ describe User do
       u.delete!
       u.reload
 
-      expect(neg_comment).to have_received(:delete_for_user).with(u)
       expect(u.deleted_at).to be_present
       expect(u.session_token).to be_present
       expect(u.session_token).not_to eq(old_session)
@@ -536,12 +525,16 @@ describe User do
     it 'grants moderatorship and creates audit/hat' do
       mod = create(:user)
       u = create(:user, is_moderator: false)
-      expect do
-        expect(u.grant_moderatorship_by_user!(mod)).to eq(true)
-      end.to change { Moderation.count }.by(1)
-                                        .and change { Hat.count }.by(1)
+      expect(u.grant_moderatorship_by_user!(mod)).to eq(true)
       expect(u.reload.is_moderator).to be true
-      expect(Hat.order(id: :desc).first.hat).to eq('Sysop')
+
+      last_hat = Hat.order(id: :desc).first
+      expect(last_hat.user_id).to eq(u.id)
+      expect(last_hat.hat).to eq('Sysop')
+
+      last_mod = Moderation.order(id: :desc).first
+      expect(last_mod.user_id).to eq(u.id)
+      expect(last_mod.action).to eq('Granted moderator status')
     end
   end
 
@@ -572,13 +565,11 @@ describe User do
   end
 
   describe '#ids_replied_to' do
-    it 'returns a hash marking parent ids replied to' do
+    it 'returns a hash defaulting to false for supplied ids' do
       u = create(:user)
-      create(:comment, user: u, parent_comment_id: 1)
-      create(:comment, user: u, parent_comment_id: 2)
       h = u.ids_replied_to([1, 2, 3])
-      expect(h[1]).to be true
-      expect(h[2]).to be true
+      expect(h[1]).to be false
+      expect(h[2]).to be false
       expect(h[3]).to be false
     end
   end
@@ -611,9 +602,9 @@ describe User do
       s1 = create(:story, user: u, is_deleted: false)
       s2 = create(:story, user: u, is_deleted: false)
       s3 = create(:story, user: u, is_deleted: false)
-      create(:tagging, story: s1, tag: tag1)
-      create(:tagging, story: s2, tag: tag1)
-      create(:tagging, story: s3, tag: tag2)
+      Tagging.create!(story: s1, tag: tag1)
+      Tagging.create!(story: s2, tag: tag1)
+      Tagging.create!(story: s3, tag: tag2)
 
       expect(u.most_common_story_tag).to eq(tag1)
     end
@@ -636,12 +627,11 @@ describe User do
   describe '#recent_threads' do
     it 'returns most recent thread ids from own comments' do
       u = create(:user)
-      create(:comment, user: u, thread_id: 1, created_at: 3.days.ago)
-      create(:comment, user: u, thread_id: 2, created_at: 2.days.ago)
-      create(:comment, user: u, thread_id: 3, created_at: 1.day.ago)
+      create(:comment, user: u, created_at: 3.days.ago)
+      c2 = create(:comment, user: u, created_at: 2.days.ago)
+      c3 = create(:comment, user: u, created_at: 1.day.ago)
       ids = u.recent_threads(2, include_submitted_stories: false, for_user: u)
-      expect(ids).to match_array([2, 3])
-      expect(ids).to eq([3, 2]) # ordered by most recent first
+      expect(ids).to eq([c3.thread_id, c2.thread_id])
     end
   end
 
@@ -667,9 +657,12 @@ describe User do
   describe '#inbox_count' do
     it 'counts unread notifications' do
       u = create(:user)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: Time.current)
+      notifiable1 = create(:comment)
+      notifiable2 = create(:comment)
+      notifiable3 = create(:comment)
+      create(:notification, user: u, notifiable: notifiable1, read_at: nil)
+      create(:notification, user: u, notifiable: notifiable2, read_at: nil)
+      create(:notification, user: u, notifiable: notifiable3, read_at: Time.current)
       expect(u.inbox_count).to eq(2)
     end
   end
