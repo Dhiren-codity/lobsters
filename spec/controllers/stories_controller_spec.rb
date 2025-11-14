@@ -28,13 +28,11 @@ RSpec.describe StoriesController, type: :controller do
   end
 
   before do
-    stub_const('Routes', Class.new)
-    allow(Routes).to receive(:title_path) do |s, opts = {}|
-      base = "/stories/#{s.respond_to?(:short_id) ? s.short_id : 'unknown'}"
-      if opts && opts[:anchor]
-        "#{base}##{opts[:anchor]}"
-      else
-        base
+    stub_const('Routes', Module.new)
+    Routes.singleton_class.class_eval do
+      define_method(:title_path) do |s, anchor: nil, **_opts|
+        base = "/stories/#{s.respond_to?(:short_id) ? s.short_id : 'unknown'}"
+        anchor ? "#{base}##{anchor}" : base
       end
     end
 
@@ -319,7 +317,7 @@ RSpec.describe StoriesController, type: :controller do
     it 'redirects to merged JSON endpoint if merged' do
       merged = instance_double(Story, short_id: 'merged1')
       allow(story).to receive(:merged_into_story).and_return(merged)
-      allow(controller).to receive(:story_path) do |st, options = {}|
+      allow(controller).to receive(:story_path) do |st, **options|
         suffix = options[:format] == :json ? '.json' : ''
         "/stories/#{st.short_id}#{suffix}"
       end
@@ -352,8 +350,16 @@ RSpec.describe StoriesController, type: :controller do
       allow(Vote).to receive(:comment_votes_by_user_for_story_hash).and_return({})
       allow(Vote).to receive(:comment_vote_summaries).and_return({})
       allow(user).to receive(:ids_replied_to).and_return({})
-      allow(Comment).to receive(:where).and_return(Comment)
-      allow(Comment).to receive(:where).and_return([])
+
+      # notifications chain for read_by_notifications
+      notif_read = instance_double(Object, of_comments: [])
+      notifications = instance_double(Object, read: notif_read)
+      allow(user).to receive(:notifications).and_return(notifications)
+
+      # chainable where calls for read_by_notifications
+      first_where = instance_double(ActiveRecord::Relation)
+      allow(Comment).to receive(:where).with(story_id: kind_of(Array)).and_return(first_where)
+      allow(first_where).to receive(:where).with(id: []).and_return([])
 
       controller.instance_variable_set(:@user, user)
       get :show, params: { id: story.short_id }
@@ -521,7 +527,7 @@ RSpec.describe StoriesController, type: :controller do
 
   describe 'POST hide' do
     before do
-      allow(controller).to receive(:story_path) do |s, _opts = {}|
+      allow(controller).to receive(:story_path) do |s, **_opts|
         "/stories/#{s.short_id}"
       end
     end
@@ -561,7 +567,7 @@ RSpec.describe StoriesController, type: :controller do
 
   describe 'DELETE unhide' do
     before do
-      allow(controller).to receive(:story_path) do |s, _opts = {}|
+      allow(controller).to receive(:story_path) do |s, **_opts|
         "/stories/#{s.short_id}"
       end
     end
