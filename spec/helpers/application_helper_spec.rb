@@ -119,4 +119,217 @@ describe ApplicationHelper do
       expect(helper.comment_score_for_user(comment, user)[:score_formatted]).to eq "1K"
     end
   end
+
+  describe "#avatar_img" do
+    it "builds an img tag with srcset, dimensions, alt and lazy-loading" do
+      user = build(:user, username: "alice")
+      allow(user).to receive(:avatar_path).with(32).and_return("/avatars/alice-32.png")
+      allow(user).to receive(:avatar_path).with(64).and_return("/avatars/alice-64.png")
+
+      html = helper.avatar_img(user, 32)
+      expect(html).to include('src="/avatars/alice-32.png"')
+      expect(html).to include('srcset="/avatars/alice-32.png 1x, /avatars/alice-64.png 2x"')
+      expect(html).to include('class="avatar"')
+      expect(html).to include('alt="alice avatar"')
+      expect(html).to include('loading="lazy"')
+      expect(html).to include('decoding="async"')
+      expect(html).to include('width="32"')
+      expect(html).to include('height="32"')
+    end
+  end
+
+  describe "#errors_for" do
+    it "renders a formatted error list with custom message for comments invalid" do
+      errors = double(blank?: false, count: 2, full_messages: ["Name can't be blank", "Comments is invalid"])
+      object = double(class: double(name: "Thing"), errors: errors)
+      html = helper.errors_for(object)
+
+      expect(html).to include('class="flash-error"')
+      expect(html).to include("2 errors prohibited this thing from being saved")
+      expect(html).to include("There were the problems with the following fields:")
+      expect(html).to include("<li>Name can't be blank</li>")
+      expect(html).to include("<li>Comment is missing</li>")
+    end
+
+    it "returns empty string when there are no errors" do
+      errors = double(blank?: true)
+      object = double(class: double(name: "Thing"), errors: errors)
+      html = helper.errors_for(object)
+      expect(html).to eq("")
+    end
+  end
+
+  describe "#filtered_tags" do
+    before { helper.instance_variable_set(:@_filtered_tags, nil) }
+
+    it "returns user tag filter tags when @user is present" do
+      t = create(:tag, tag: "ruby")
+      user = double(tag_filter_tags: [t])
+      helper.instance_variable_set(:@user, user)
+      expect(helper.filtered_tags).to eq([t])
+    end
+
+    it "returns tags from cookie when @user is not present" do
+      helper.instance_variable_set(:@user, nil)
+      t1 = create(:tag, tag: "ruby")
+      t2 = create(:tag, tag: "rails")
+      cookies[ApplicationController::TAG_FILTER_COOKIE] = "ruby,rails"
+      expect(helper.filtered_tags.map(&:id)).to match_array([t1.id, t2.id])
+    end
+  end }
+
+  describe "#inline_avatar_for" do
+    let(:user) { create(:user) }
+
+    it "returns a link with avatar when viewer is nil" do
+      allow(helper).to receive(:avatar_img).with(user, 16).and_return("IMG")
+      html = helper.inline_avatar_for(nil, user)
+      expect(html).to include(%(href="#{user_path(user)}"))
+      expect(html).to include("IMG")
+    end
+
+    it "returns a link with avatar when viewer shows avatars" do
+      viewer = double(show_avatars?: true)
+      allow(helper).to receive(:avatar_img).with(user, 16).and_return("IMG")
+      html = helper.inline_avatar_for(viewer, user)
+      expect(html).to include(%(href="#{user_path(user)}"))
+      expect(html).to include("IMG")
+    end
+
+    it "returns nil when viewer hides avatars" do
+      viewer = double(show_avatars?: false)
+      expect(helper.inline_avatar_for(viewer, user)).to be_nil
+    end
+  end
+
+  describe "#link_to_different_page" do
+    it "marks link as current when paths match after stripping page segment" do
+      allow(helper).to receive(:request).and_return(double(path: "/posts/page/3"))
+      html = helper.link_to_different_page("Posts", "/posts/page/2", class: "btn")
+      # href path stripped to /posts and class includes current_page
+      expect(html).to include('href="/posts"')
+      expect(html).to include('class="btn current_page"')
+    end
+
+    it "does not mark as current when paths do not match" do
+      allow(helper).to receive(:request).and_return(double(path: "/posts"))
+      html = helper.link_to_different_page("Other", "/other", class: "btn")
+      expect(html).to include('href="/other"')
+      expect(html).to include('class="btn"')
+      expect(html).not_to include('current_page')
+    end
+  end
+
+  describe "#link_post" do
+    it "renders the partial with defaults" do
+      expect(helper).to receive(:render).with(
+        partial: "helpers/link_post",
+        locals: { button_label: "Delete", link: "/items/1", class_name: nil, confirm: nil }
+      ).and_return("OK")
+      expect(helper.link_post("Delete", "/items/1")).to eq("OK")
+    end
+
+    it "renders the partial with provided options" do
+      expect(helper).to receive(:render).with(
+        partial: "helpers/link_post",
+        locals: { button_label: "Delete", link: "/items/1", class_name: "danger", confirm: "Are you sure?" }
+      ).and_return("OK")
+      expect(helper.link_post("Delete", "/items/1", class_name: "danger", confirm: "Are you sure?")).to eq("OK")
+    end
+  end
+
+  describe "#tag (override)" do
+    it "defaults to open tag true producing an opening tag" do
+      expect(helper.tag(:div)).to eq("<div>")
+    end
+  end
+
+  describe "#tag_link" do
+    let(:tag_record) { create(:tag, tag: "ruby", css_class: "tag-ruby", description: "Ruby lang") }
+
+    it "builds a link to the tag with classes and title" do
+      allow(helper).to receive(:filtered_tags).and_return([])
+      html = helper.tag_link(tag_record)
+      expect(html).to include(%(href="#{tag_path(tag_record)}"))
+      expect(html).to include(">ruby<")
+      expect(html).to include('class="tag-ruby"')
+      expect(html).to include('title="Ruby lang"')
+      expect(html).not_to include("filtered")
+    end
+
+    it "includes filtered class when tag is filtered" do
+      allow(helper).to receive(:filtered_tags).and_return([tag_record])
+      html = helper.tag_link(tag_record)
+      expect(html).to include('class="tag-ruby filtered"')
+    end
+  end
+
+  describe "#how_long_ago_label" do
+    it "renders a time element with proper attributes and content" do
+      time = Time.at(1_700_000_000).in_time_zone
+      allow(helper).to receive(:how_long_ago).with(time).and_return("x ago")
+      html = helper.how_long_ago_label(time)
+      at = time.strftime("%F %T")
+      expect(html).to include("<time")
+      expect(html).to include(">x ago</time>")
+      expect(html).to include(%(title="#{at}"))
+      expect(html).to include(%(datetime="#{at}"))
+      expect(html).to include(%(data-at-unix="#{time.to_i}"))
+    end
+  end
+
+  describe "#how_long_ago_link" do
+    it "wraps the label in an anchor tag" do
+      time = Time.at(1_700_000_000).in_time_zone
+      allow(helper).to receive(:how_long_ago).with(time).and_return("just now")
+      html = helper.how_long_ago_link("/path", time)
+      expect(html).to include(%(href="/path"))
+      expect(html).to include("<time")
+      expect(html).to include(">just now</time>")
+    end
+  end
+
+  describe "#possible_flag_warning" do
+    let(:showing_user) { create(:user) }
+    let(:user) { create(:user) }
+
+    it "renders dev flag warning in non-production environments" do
+      # In test env, production? is false
+      expect(helper).to receive(:render).with(partial: "users/dev_flag_warning").and_return("DEV")
+      expect(helper.possible_flag_warning(showing_user, user)).to eq("DEV")
+    end
+
+    context "in production" do
+      before do
+        allow(Rails).to receive(:env).and_return(ActiveSupport::StringInquirer.new("production"))
+      end
+
+      it "returns nil if user is not self or mod" do
+        expect(helper).to receive(:self_or_mod).with(showing_user, user).and_return(false)
+        expect(helper.possible_flag_warning(showing_user, user)).to be_nil
+      end
+
+      it "returns nil if user is self/mod but not flagged in interval" do
+        expect(helper).to receive(:self_or_mod).with(showing_user, user).and_return(true)
+        interval = { param: "1m" }
+        expect(helper).to receive(:time_interval).with("1m").and_return(interval)
+        checker = double(check_list_for: false)
+        expect(FlaggedCommenters).to receive(:new).and_return(checker)
+        expect(helper.possible_flag_warning(showing_user, user)).to be_nil
+      end
+
+      it "renders flag warning when flagged in interval" do
+        expect(helper).to receive(:self_or_mod).with(showing_user, user).and_return(true)
+        interval = { param: "1m" }
+        expect(helper).to receive(:time_interval).with("1m").and_return(interval)
+        checker = double(check_list_for: true)
+        expect(FlaggedCommenters).to receive(:new).and_return(checker)
+        expect(helper).to receive(:render).with(
+          partial: "users/flag_warning",
+          locals: { showing_user: showing_user, interval: interval }
+        ).and_return("FLAG")
+        expect(helper.possible_flag_warning(showing_user, user)).to eq("FLAG")
+      end
+    end
+  end
 end
