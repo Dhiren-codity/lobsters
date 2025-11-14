@@ -1,7 +1,6 @@
-# typed: false
-
 require 'rails_helper'
 require 'spec_helper'
+require 'ostruct'
 
 describe Comment do
   it 'should get a short id' do
@@ -121,7 +120,7 @@ describe Comment do
     it 'limits longer with flags' do
       top = create(:comment, story: story, user: author, created_at: 150.seconds.ago)
       mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, create(:user).id, 'T')
+      Vote.create!(story: story, comment: mid, user: create(:user), vote: -1, reason: 'T')
       c = Comment.new(
         user: author,
         story: story,
@@ -134,7 +133,7 @@ describe Comment do
     it 'has an extra message if author flagged a parent' do
       top = create(:comment, story: story, user: author, created_at: 200.seconds.ago)
       mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, author.id, 'T')
+      Vote.create!(story: story, comment: mid, user: author, vote: -1, reason: 'T')
       c = Comment.new(
         user: author,
         story: story,
@@ -148,7 +147,7 @@ describe Comment do
     it "doesn't limit slow responses" do
       top = create(:comment, story: story, user: author, created_at: 20.minutes.ago)
       mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, author.id, 'T')
+      Vote.create!(story: story, comment: mid, user: author, vote: -1, reason: 'T')
       c = Comment.new(
         user: author,
         story: story,
@@ -299,7 +298,7 @@ describe Comment do
     it 'explains moderator removal with reason' do
       mod = create(:user, :moderator)
       c = create(:comment, is_moderated: true)
-      create(:moderation, comment: c, moderator: mod, action: 'deleted comment', reason: 'Rules')
+      Moderation.create!(comment: c, moderator: mod, action: 'deleted comment', reason: 'Rules')
       expect(c.gone_text).to include('Comment removed by moderator')
       expect(c.gone_text).to include(mod.username)
       expect(c.gone_text).to include('Rules')
@@ -359,7 +358,8 @@ describe Comment do
     it 'is flaggable only when recent and above min score' do
       c1 = create(:comment, created_at: 2.days.ago, score: 0)
       c2 = create(:comment, created_at: (Comment::FLAGGABLE_DAYS + 1).days.ago)
-      c3 = create(:comment, created_at: 1.day.ago, score: Comment::FLAGGABLE_MIN_SCORE)
+      c3 = create(:comment, created_at: 1.day.ago)
+      c3.update_columns(score: Comment::FLAGGABLE_MIN_SCORE)
       expect(c1.is_flaggable?).to be true
       expect(c2.is_flaggable?).to be false
       expect(c3.is_flaggable?).to be false
@@ -422,7 +422,7 @@ describe Comment do
 
   describe '#mailing_list_message_id' do
     it 'includes email when from email and domain' do
-      c = create(:comment, is_from_email: true, created_at: 1_700_000_000.to_i)
+      c = create(:comment, is_from_email: true, created_at: Time.at(1_700_000_000))
       expect(c.mailing_list_message_id).to include('comment')
       expect(c.mailing_list_message_id).to include(c.short_id)
       expect(c.mailing_list_message_id).to include('email')
