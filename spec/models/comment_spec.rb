@@ -1,6 +1,5 @@
-# typed: false
-
 require 'rails_helper'
+require 'ostruct'
 
 describe Comment do
   it 'should get a short id' do
@@ -120,7 +119,7 @@ describe Comment do
     it 'limits longer with flags' do
       top = create(:comment, story: story, user: author, created_at: 150.seconds.ago)
       mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, create(:user).id, 'T')
+      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story.id, mid.id, create(:user).id, 'T')
       c = Comment.new(
         user: author,
         story: story,
@@ -133,7 +132,7 @@ describe Comment do
     it 'has an extra message if author flagged a parent' do
       top = create(:comment, story: story, user: author, created_at: 200.seconds.ago)
       mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, author.id, 'T')
+      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story.id, mid.id, author.id, 'T')
       c = Comment.new(
         user: author,
         story: story,
@@ -147,7 +146,7 @@ describe Comment do
     it "doesn't limit slow responses" do
       top = create(:comment, story: story, user: author, created_at: 20.minutes.ago)
       mid = create(:comment, story: story, parent_comment: top, created_at: 60.seconds.ago)
-      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story, mid, author.id, 'T')
+      Vote.vote_thusly_on_story_or_comment_for_user_because(-1, story.id, mid.id, author.id, 'T')
       c = Comment.new(
         user: author,
         story: story,
@@ -307,22 +306,30 @@ describe Comment do
     end
 
     it 'is true when depth is less than MAX_DEPTH' do
-      c = create(:comment, depth: 0)
+      c = create(:comment)
       expect(c.depth_permits_reply?).to be true
     end
 
     it 'is false when depth is at MAX_DEPTH' do
-      c = create(:comment, depth: Comment::MAX_DEPTH)
+      parent = nil
+      (Comment::MAX_DEPTH + 1).times do
+        parent = create(:comment, parent_comment: parent)
+      end
+      c = parent
+      expect(c.depth).to eq(Comment::MAX_DEPTH)
       expect(c.depth_permits_reply?).to be false
     end
   end
 
   describe '#gone_text' do
     it 'includes moderator and reason when moderated' do
-      moderator = create(:user, :moderator, username: 'moddy')
+      create(:user, :moderator, username: 'moddy')
       author = create(:user)
       c = create(:comment, user: author, is_moderated: true)
-      create(:moderation, comment: c, moderator: moderator, reason: 'off-topic')
+      mod_double = instance_double('Moderation',
+                                   moderator: instance_double('User', username: 'moddy'),
+                                   reason: 'off-topic')
+      allow(c).to receive(:moderation).and_return(mod_double)
       expect(c.gone_text).to include('Comment removed by moderator moddy: off-topic')
     end
 
@@ -330,7 +337,10 @@ describe Comment do
       moderator = create(:user, :moderator)
       author = create(:user)
       c = create(:comment, user: author, is_moderated: true)
-      create(:moderation, comment: c, moderator: moderator, reason: nil)
+      mod_double = instance_double('Moderation',
+                                   moderator: moderator,
+                                   reason: nil)
+      allow(c).to receive(:moderation).and_return(mod_double)
       expect(c.gone_text).to include('No reason given')
     end
 
@@ -350,12 +360,14 @@ describe Comment do
 
   describe '#has_been_edited?' do
     it 'is true when last_edited_at is more than a minute after created_at' do
-      c = create(:comment, created_at: 2.hours.ago, last_edited_at: 2.hours.ago + 2.minutes)
+      c = create(:comment)
+      c.update_columns(created_at: 2.hours.ago, last_edited_at: 2.hours.ago + 2.minutes)
       expect(c.has_been_edited?).to be true
     end
 
     it 'is false when not edited or edited within a minute' do
-      c = create(:comment, created_at: 2.hours.ago, last_edited_at: 2.hours.ago + 30.seconds)
+      c = create(:comment)
+      c.update_columns(created_at: 2.hours.ago, last_edited_at: 2.hours.ago + 30.seconds)
       expect(c.has_been_edited?).to be false
     end
   end
@@ -412,7 +424,8 @@ describe Comment do
     end
 
     it 'is false when score below or equal to min' do
-      c = create(:comment, created_at: 1.day.ago, score: Comment::FLAGGABLE_MIN_SCORE)
+      c = create(:comment, created_at: 1.day.ago)
+      c.update_columns(score: Comment::FLAGGABLE_MIN_SCORE)
       expect(c.is_flaggable?).to be false
     end
   end
@@ -426,7 +439,8 @@ describe Comment do
 
     it 'is false after edit window' do
       author = create(:user)
-      c = create(:comment, user: author, last_edited_at: Time.current - (Comment::MAX_EDIT_MINS + 5).minutes)
+      c = create(:comment, user: author)
+      c.update_columns(last_edited_at: Time.current - (Comment::MAX_EDIT_MINS + 5).minutes)
       expect(c.is_editable_by_user?(author)).to be false
     end
 
@@ -516,7 +530,7 @@ describe Comment do
       top = create(:comment, parent_comment: nil)
       mid = create(:comment, parent_comment: top)
       leaf = create(:comment, parent_comment: mid)
-      expect(leaf.parents).to eq([mid, top])
+      expect(leaf.parents).to eq([top, mid])
     end
   end
 

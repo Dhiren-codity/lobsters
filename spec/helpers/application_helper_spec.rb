@@ -1,5 +1,3 @@
-# typed: false
-
 require 'rails_helper'
 
 describe ApplicationHelper do
@@ -141,20 +139,20 @@ describe ApplicationHelper do
   end
 
   describe '#errors_for' do
-    let(:dummy) do
-      Class.new do
+    let(:dummy_class) do
+      stub_const('SpecModel', Class.new do
         include ActiveModel::Model
         attr_accessor :name
-      end
+      end)
     end
 
     it 'returns empty string when there are no errors' do
-      obj = dummy.new(name: 'ok')
+      obj = dummy_class.new(name: 'ok')
       expect(helper.errors_for(obj)).to eq('')
     end
 
     it 'renders a flash error div with pluralized header and messages' do
-      obj = dummy.new
+      obj = dummy_class.new
       obj.errors.add(:name, :blank)
       html = helper.errors_for(obj)
       expect(html).to include('class="flash-error"')
@@ -164,7 +162,7 @@ describe ApplicationHelper do
     end
 
     it "replaces 'Comments is invalid' with 'Comment is missing'" do
-      obj = dummy.new
+      obj = dummy_class.new
       obj.errors.add(:comments, :invalid)
       html = helper.errors_for(obj)
       expect(html).to include('<li>Comment is missing</li>')
@@ -222,13 +220,13 @@ describe ApplicationHelper do
     end
 
     it 'marks link as current_page when path matches after pagination stripping' do
-      html = helper.link_to_different_page('Stories', '/stories/page/1', class: 'base')
+      html = helper.link_to_different_page('Stories', '/stories/page/1'.dup, class: 'base')
       expect(html).to include('href="/stories"')
       expect(html).to include('class="base current_page"')
     end
 
     it 'does not mark as current_page when path differs' do
-      html = helper.link_to_different_page('Other', '/other', class: 'base')
+      html = helper.link_to_different_page('Other', '/other'.dup, class: 'base')
       expect(html).to include('href="/other"')
       expect(html).to include('class="base"')
       expect(html).to_not include('current_page')
@@ -302,7 +300,10 @@ describe ApplicationHelper do
 
       it 'returns nil when flagged commenters do not include the user' do
         allow(helper).to receive(:self_or_mod).with(showing_user, user).and_return(true)
-        allow(helper).to receive(:time_interval).with('1m').andReturn({ param: '1m' })
+        allow(helper).to receive(:time_interval).with('1m').and_return({ param: '1m' })
+        checker = double('FlaggedCommenters', check_list_for: false)
+        expect(FlaggedCommenters).to receive(:new).with('1m', 1.day).and_return(checker)
+        expect(helper.possible_flag_warning(showing_user, user)).to be_nil
       end
     end
   end
