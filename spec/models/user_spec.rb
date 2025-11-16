@@ -1,5 +1,3 @@
-# typed: false
-
 require 'rails_helper'
 require 'spec_helper'
 
@@ -218,8 +216,9 @@ describe User do
     it 'returns moderators including via moderation history' do
       mod_flag = create(:user, is_moderator: true)
       history_mod = create(:user, is_moderator: false)
-      create(:moderation, moderator_user_id: history_mod.id, token: 'some_action')
       non_mod = create(:user, is_moderator: false)
+      Moderation.create!(moderator_user_id: history_mod.id, user_id: non_mod.id, action: 'Did something',
+                         token: 'some_action')
       result = User.moderators.to_a
       expect(result).to include(mod_flag)
       expect(result).to include(history_mod)
@@ -257,7 +256,7 @@ describe User do
     let!(:inviter) { create(:user) }
 
     it 'includes public fields and computed fields for non-admin' do
-      u = create(:user, invited_by_user: inviter, about: 'hi', is_admin: false)
+      u = create(:user, invited_by_user_id: inviter.id, about: 'hi', is_admin: false)
       allow(Markdowner).to receive(:to_html).with(u.about).and_return('about_html')
       allow(ActionController::Base.helpers).to receive(:image_url).and_return('http://example.com/avatar.png')
       h = u.as_json
@@ -435,6 +434,7 @@ describe User do
 
   describe '#fetched_avatar' do
     it 'returns bytes when fetch succeeds' do
+      allow_any_instance_of(String).to receive(:<<) { |str, arg| str + arg.to_s }
       u = create(:user, email: 'user@example.com')
       sponge = double
       allow(Sponge).to receive(:new).and_return(sponge)
@@ -444,6 +444,7 @@ describe User do
     end
 
     it 'returns nil when fetch fails' do
+      allow_any_instance_of(String).to receive(:<<) { |str, arg| str + arg.to_s }
       u = create(:user, email: 'user@example.com')
       sponge = double
       allow(Sponge).to receive(:new).and_return(sponge)
@@ -503,7 +504,7 @@ describe User do
       expect(u.grant_moderatorship_by_user!(granter)).to be true
       u.reload
       expect(u.is_moderator).to be true
-      mod = Moderation.order(:id).last
+      mod = Moderation.where(action: 'Granted moderator status').order(:id).last
       expect(mod.moderator_user_id).to eq(granter.id)
       expect(mod.user_id).to eq(u.id)
       expect(mod.action).to eq('Granted moderator status')
@@ -573,8 +574,8 @@ describe User do
   describe '#most_common_story_tag' do
     it "returns the most common active tag for user's non-deleted stories" do
       u = create(:user)
-      tag1 = create(:tag, inactive: false)
-      tag2 = create(:tag, inactive: false)
+      tag1 = create(:tag)
+      tag2 = create(:tag)
       s1 = create(:story, user: u, is_deleted: false)
       s2 = create(:story, user: u, is_deleted: false)
       s3 = create(:story, user: u, is_deleted: false)
@@ -626,9 +627,11 @@ describe User do
   describe '#inbox_count' do
     it 'counts unread notifications' do
       u = create(:user)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: Time.current)
+      s = create(:story, user: u)
+      c = create(:comment, user: u, story: s)
+      create(:notification, user: u, notifiable: s, read_at: nil)
+      create(:notification, user: u, notifiable: c, read_at: nil)
+      create(:notification, user: u, notifiable: s, read_at: Time.current)
       expect(u.inbox_count).to eq(2)
     end
   end
@@ -644,8 +647,8 @@ describe User do
 
       vote_on_own_story = create(:vote, user: voter, story: own_story, comment: nil)
       vote_on_other_story = create(:vote, user: voter, story: other_story, comment: nil)
-      vote_on_own_comment = create(:vote, user: voter, comment: own_comment, story: nil)
-      vote_on_other_comment = create(:vote, user: voter, comment: other_comment, story: nil)
+      vote_on_own_comment = create(:vote, user: voter, comment: own_comment, story: own_story)
+      vote_on_other_comment = create(:vote, user: voter, comment: other_comment, story: other_story)
 
       results = voter.votes_for_others.to_a
       expect(results).to include(vote_on_other_story, vote_on_other_comment)
