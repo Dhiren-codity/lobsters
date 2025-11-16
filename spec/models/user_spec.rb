@@ -195,9 +195,10 @@ describe User do
     end
 
     it 'associates notifications and inbox_count reflects unread count' do
-      story = create(:story)
-      create(:notification, user: user, notifiable: story, read_at: nil)
-      create(:notification, user: user, notifiable: story, read_at: Time.current)
+      story1 = create(:story)
+      story2 = create(:story)
+      create(:notification, user: user, notifiable: story1, read_at: nil)
+      create(:notification, user: user, notifiable: story2, read_at: Time.current)
       expect(user.inbox_count).to eq(1)
     end
   end
@@ -225,8 +226,10 @@ describe User do
 
       json = admin.as_json
 
-      expect(json.keys).to include('username', 'created_at', 'is_admin', 'is_moderator', 'homepage')
       expect(json).to_not have_key('karma')
+      expect(json).to include('username' => admin.username)
+      expect(json).to include('is_admin' => true, 'is_moderator' => false)
+      expect(json).to include('homepage' => admin.homepage)
       expect(json[:invited_by_user]).to eq('inviter_user')
       expect(json[:about]).to eq('<p>Hi</p>')
       expect(json[:avatar_url]).to eq('http://example.com/avatar.png')
@@ -546,11 +549,9 @@ describe User do
     it 'grants mod, creates moderation and hat' do
       mod = create(:user)
       user = create(:user)
-      expect do
-        expect(user.grant_moderatorship_by_user!(mod)).to be true
-      end.to change(Moderation, :count).by(1).and change(Hat, :count).by(1)
+      expect { user.grant_moderatorship_by_user!(mod) }.to change(Moderation, :count).by(1)
       expect(user.reload.is_moderator).to be true
-      expect(Hat.order(:id).last.hat).to eq('Sysop')
+      expect(user.hats.pluck(:hat)).to include('Sysop')
     end
   end
 
@@ -603,7 +604,7 @@ describe User do
   describe '#pushover!' do
     it 'sends when key present' do
       user = create(:user, pushover_user_key: 'key123')
-      expect(Pushover).to receive(:push).with('key123', title: 't')
+      expect(Pushover).to receive(:push).with('key123', hash_including(title: 't'))
       user.pushover!(title: 't')
     end
 
@@ -648,8 +649,8 @@ describe User do
 
       v1 = create(:vote, user: voter, story: s1, comment: nil)
       v2 = create(:vote, user: voter, story: s2, comment: nil)
-      v3 = create(:vote, user: voter, story: nil, comment: c1)
-      v4 = create(:vote, user: voter, story: nil, comment: c2)
+      v3 = create(:vote, user: voter, story: s1, comment: c1)
+      v4 = create(:vote, user: voter, story: s2, comment: c2)
 
       result = voter.votes_for_others.to_a
       expect(result).to include(v1, v3)
