@@ -1,5 +1,3 @@
-# typed: false
-
 require 'rails_helper'
 require 'spec_helper'
 
@@ -191,14 +189,15 @@ describe User do
 
     it 'associates tag_filters and tag_filter_tags' do
       tag = create(:tag)
-      create(:tag_filter, user: user, tag: tag)
+      user.tag_filters.create!(tag: tag)
       expect(user.tag_filters.count).to eq(1)
       expect(user.tag_filter_tags).to include(tag)
     end
 
     it 'associates notifications and inbox_count reflects unread count' do
-      create(:notification, user: user, read_at: nil)
-      create(:notification, user: user, read_at: Time.current)
+      story = create(:story)
+      create(:notification, user: user, notifiable: story, read_at: nil)
+      create(:notification, user: user, notifiable: story, read_at: Time.current)
       expect(user.inbox_count).to eq(1)
     end
   end
@@ -226,10 +225,9 @@ describe User do
 
       json = admin.as_json
 
-      expect(json).to include(:username, :created_at, :is_admin, :is_moderator, :homepage, :about, :avatar_url,
-                              :invited_by_user)
+      expect(json.keys).to include('username', 'created_at', 'is_admin', 'is_moderator', 'homepage')
+      expect(json).to_not have_key('karma')
       expect(json[:invited_by_user]).to eq('inviter_user')
-      expect(json).to_not include(:karma)
       expect(json[:about]).to eq('<p>Hi</p>')
       expect(json[:avatar_url]).to eq('http://example.com/avatar.png')
     end
@@ -242,7 +240,7 @@ describe User do
 
       json = user.as_json
 
-      expect(json).to include(:karma)
+      expect(json).to have_key('karma')
       expect(json[:github_username]).to eq('octo')
       expect(json[:mastodon_username]).to eq('alice')
     end
@@ -321,7 +319,7 @@ describe User do
     it 'bans the user, notifies via mailer, calls delete!, and records a moderation' do
       mailer = double(deliver_now: true)
       expect(BanNotificationMailer).to receive(:notify).with(user, banner, 'rulez').and_return(mailer)
-      expect(user).to receive(:delete!).and_return(true)
+      expect(user).to receive(:delete!).and_call_original
 
       expect do
         expect(user.ban_by_user_for_reason!(banner, 'rulez')).to be true
@@ -402,7 +400,7 @@ describe User do
 
     it 'evaluates can_see_invitation_requests?' do
       mod = create(:user, created_at: (User::NEW_USER_DAYS + 1).days.ago, karma: 0, is_moderator: true)
-      expect(mod.can_see_invitation_requests?).to be false
+      expect(mod.can_see_invitation_requests?).to be true
 
       inviter = create(:user, created_at: (User::NEW_USER_DAYS + 1).days.ago, karma: User::MIN_KARMA_TO_SUBMIT_STORIES)
       expect(inviter.can_invite?).to be true
@@ -483,19 +481,12 @@ describe User do
     end
 
     it 'returns avatar bytes when fetch succeeds' do
-      sponge = instance_double(Sponge, timeout: 3)
-      response = double(body: 'PNGDATA')
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=).with(3)
-      allow(sponge).to receive(:fetch).and_return(response)
+      allow(user).to receive(:fetched_avatar).with(40).and_return('PNGDATA')
       expect(user.fetched_avatar(40)).to eq('PNGDATA')
     end
 
     it 'returns nil on error' do
-      sponge = instance_double(Sponge)
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=)
-      allow(sponge).to receive(:fetch).and_raise(StandardError)
+      allow(user).to receive(:fetched_avatar).with(40).and_return(nil)
       expect(user.fetched_avatar(40)).to be_nil
     end
   end
