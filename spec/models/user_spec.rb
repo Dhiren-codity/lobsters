@@ -200,9 +200,9 @@ describe User do
       allow(user).to receive(:linkified_about).and_return('<p>about html</p>')
       allow(user).to receive(:avatar_url).and_return('https://img.example/u.png')
       json = user.as_json
-      expect(json['username']).to eq(user.username)
-      expect(json['homepage']).to eq('https://lobste.rs')
-      expect(json).to have_key('karma')
+      expect(json[:username]).to eq(user.username)
+      expect(json[:homepage]).to eq('https://lobste.rs')
+      expect(json).to have_key(:karma)
       expect(json[:about]).to eq('<p>about html</p>')
       expect(json[:avatar_url]).to eq('https://img.example/u.png')
       expect(json[:invited_by_user]).to eq('inviter_user')
@@ -447,12 +447,29 @@ describe User do
   describe '#fetched_avatar' do
     let(:user) { create(:user, email: 'user@example.com') }
 
-    it 'raises FrozenError due to frozen string concatenation in URL building' do
-      expect { user.fetched_avatar(80) }.to raise_error(FrozenError)
+    it 'returns the response body when fetch succeeds' do
+      digest = Digest::MD5.hexdigest('user@example.com'.strip.downcase)
+      expected_url = "https://www.gravatar.com/avatar/#{digest}?r=pg&d=identicon&s=80"
+
+      sponge = instance_double('Sponge')
+      response = double(body: 'IMGDATA')
+      expect(Sponge).to receive(:new).and_return(sponge)
+      expect(sponge).to receive(:timeout=).with(3)
+      expect(sponge).to receive(:fetch).with(expected_url).and_return(response)
+
+      expect(user.fetched_avatar(80)).to eq('IMGDATA')
     end
 
-    it 'raises FrozenError even when fetch would otherwise raise' do
-      expect { user.fetched_avatar(80) }.to raise_error(FrozenError)
+    it 'returns nil when fetch raises' do
+      digest = Digest::MD5.hexdigest('user@example.com'.strip.downcase)
+      expected_url = "https://www.gravatar.com/avatar/#{digest}?r=pg&d=identicon&s=80"
+
+      sponge = instance_double('Sponge')
+      expect(Sponge).to receive(:new).and_return(sponge)
+      expect(sponge).to receive(:timeout=).with(3)
+      expect(sponge).to receive(:fetch).with(expected_url).and_raise(StandardError.new('network'))
+
+      expect(user.fetched_avatar(80)).to be_nil
     end
   end
 
@@ -533,14 +550,26 @@ describe User do
     it 'grants mod, records moderation, and grants a Sysop hat' do
       grantor = create(:user)
       u = create(:user, is_moderator: false)
-      expect do
-        u.grant_moderatorship_by_user!(grantor)
-      end.to change { Moderation.count }.by(1).and change { Hat.count }.by(1)
+
+      prev_mods = Moderation.count
+      prev_hats = Hat.count
+
+      expect(u.grant_moderatorship_by_user!(grantor)).to be true
       u.reload
+
+      expect(Moderation.count).to eq(prev_mods + 1)
+      expect(Hat.count).to eq(prev_hats + 1)
       expect(u.is_moderator).to be true
+
       hat = Hat.order(:id).last
       expect(hat.user_id).to eq(u.id)
       expect(hat.hat).to eq('Sysop')
+      expect(hat.granted_by_user_id).to eq(grantor.id)
+
+      mod = Moderation.order(:id).last
+      expect(mod.user_id).to eq(u.id)
+      expect(mod.moderator_user_id).to eq(grantor.id)
+      expect(mod.action).to eq('Granted moderator status')
     end
   end
 
@@ -600,8 +629,8 @@ describe User do
   describe '#most_common_story_tag' do
     it 'returns the tag with the most non-deleted stories by the user' do
       u = create(:user)
-      t1 = create(:tag)
-      t2 = create(:tag)
+      t1 = create(:tag, active: true)
+      t2 = create(:tag, active: true)
       s1 = create(:story, user: u, is_deleted: false)
       s2 = create(:story, user: u, is_deleted: false)
       s3 = create(:story, user: u, is_deleted: false)
@@ -678,19 +707,20 @@ describe User do
     it "returns only votes on others' content ordered desc" do
       voter = create(:user)
       other = create(:user)
+
       own_story = create(:story, user: voter)
       others_story = create(:story, user: other)
-      own_comment = create(:comment, user: voter)
-      others_comment = create(:comment, user: other)
+
+      own_comment = create(:comment, user: voter, story: own_story)
+      others_comment = create(:comment, user: other, story: others_story)
 
       v1 = create(:vote, user: voter, story: others_story, comment: nil)
-      v2 = create(:vote, user: voter, story: nil, comment: others_comment)
+      v2 = create(:vote, user: voter, story: others_story, comment: others_comment)
       _excluded1 = create(:vote, user: voter, story: own_story, comment: nil)
-      _excluded2 = create(:vote, user: voter, story: nil, comment: own_comment)
+      _excluded2 = create(:vote, user: voter, story: own_story, comment: own_comment)
 
       results = voter.votes_for_others.to_a
-      expect(results).to match_array([v1, v2])
-      expect(results.map(&:id)).to eq([v2.id, v1.id].sort.reverse)
+      expect(results).to eq([v2, v1])
     end
   end
 end
