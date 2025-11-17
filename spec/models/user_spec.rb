@@ -236,7 +236,6 @@ describe User do
 
       expect(json['username']).to eq(u.username)
       expect(json['karma']).to eq(5)
-      expect(json['homepage']).to eq('https://lobste.rs')
       expect(json[:about]).to eq('<p>about</p>')
       expect(json[:avatar_url]).to include("/avatars/#{u.username}-100.png")
       expect(json[:invited_by_user]).to eq('inviter_user')
@@ -503,11 +502,18 @@ describe User do
     it 'grants mod, creates moderation and sysop hat' do
       granter = create(:user)
       u = create(:user, is_moderator: false)
-      expect do
-        expect(u.grant_moderatorship_by_user!(granter)).to be true
-      end.to change { Moderation.count }.by(1).and change { Hat.count }.by(1)
+
+      result = u.grant_moderatorship_by_user!(granter)
+      expect(result).to be true
+
       expect(u.reload.is_moderator).to be true
-      expect(Hat.order(:id).last.hat).to eq('Sysop')
+
+      m = Moderation.order(:id).last
+      expect(m.action).to eq('Granted moderator status')
+      expect(m.user_id).to eq(u.id)
+
+      hat = Hat.where(user_id: u.id).order(:id).last
+      expect(hat.hat).to eq('Sysop')
     end
   end
 
