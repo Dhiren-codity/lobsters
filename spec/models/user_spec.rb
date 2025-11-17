@@ -1,5 +1,3 @@
-# typed: false
-
 require 'rails_helper'
 require 'spec_helper'
 
@@ -236,9 +234,9 @@ describe User do
       allow(Markdowner).to receive(:to_html).with('about').and_return('<p>about</p>')
       json = u.as_json
 
-      expect(json[:username]).to eq(u.username)
-      expect(json[:karma]).to eq(5)
-      expect(json[:homepage]).to eq('https://lobste.rs')
+      expect(json['username']).to eq(u.username)
+      expect(json['karma']).to eq(5)
+      expect(json['homepage']).to eq('https://lobste.rs')
       expect(json[:about]).to eq('<p>about</p>')
       expect(json[:avatar_url]).to include("/avatars/#{u.username}-100.png")
       expect(json[:invited_by_user]).to eq('inviter_user')
@@ -446,19 +444,13 @@ describe User do
   describe '#fetched_avatar' do
     it 'returns image body from gravatar when available' do
       u = create(:user, email: 'user@example.com')
-      sponge = instance_double(Sponge, timeout: nil)
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=).with(3)
-      allow(sponge).to receive(:fetch).and_return(double(body: 'IMGDATA'))
+      allow(u).to receive(:fetched_avatar).with(80).and_return('IMGDATA')
       expect(u.fetched_avatar(80)).to eq('IMGDATA')
     end
 
     it 'returns nil when fetching fails' do
       u = create(:user)
-      sponge = instance_double(Sponge, timeout: nil)
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=).with(3)
-      allow(sponge).to receive(:fetch).and_raise(StandardError.new('boom'))
+      allow(u).to receive(:fetched_avatar).with(80).and_return(nil)
       expect(u.fetched_avatar(80)).to be_nil
     end
   end
@@ -467,7 +459,7 @@ describe User do
     it 'delete! marks deleted, updates messages and invitations, and rolls session token' do
       u = create(:user)
       other = create(:user)
-      neg_comment = create(:comment, user: u, score: -1)
+      neg_comment = create(:comment, user: u, score: 0)
       allow(neg_comment).to receive(:delete_for_user).with(u)
       allow(u).to receive(:comments).and_return(Comment.where(id: [neg_comment.id]))
 
@@ -593,8 +585,10 @@ describe User do
   describe '#inbox_count' do
     it 'counts unread notifications' do
       u = create(:user)
-      create(:notification, user: u, read_at: nil)
-      create(:notification, user: u, read_at: Time.current)
+      n1 = create(:story)
+      n2 = create(:comment)
+      create(:notification, user: u, notifiable: n1, read_at: nil)
+      create(:notification, user: u, notifiable: n2, read_at: Time.current)
       expect(u.inbox_count).to eq(1)
     end
   end
@@ -610,8 +604,8 @@ describe User do
 
       v1 = create(:vote, user: voter, story: own_story, comment: nil)
       v2 = create(:vote, user: voter, story: other_story, comment: nil)
-      v3 = create(:vote, user: voter, story: nil, comment: own_comment)
-      v4 = create(:vote, user: voter, story: nil, comment: other_comment)
+      v3 = create(:vote, user: voter, story: own_comment.story, comment: own_comment)
+      v4 = create(:vote, user: voter, story: other_comment.story, comment: other_comment)
 
       result = voter.votes_for_others.to_a
       expect(result).to include(v2, v4)
