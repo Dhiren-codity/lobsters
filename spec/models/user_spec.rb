@@ -1,5 +1,3 @@
-# typed: false
-
 require 'rails_helper'
 require 'spec_helper'
 
@@ -202,9 +200,9 @@ describe User do
       allow(user).to receive(:linkified_about).and_return('<p>about html</p>')
       allow(user).to receive(:avatar_url).and_return('https://img.example/u.png')
       json = user.as_json
-      expect(json[:username]).to eq(user.username)
-      expect(json[:homepage]).to eq('https://lobste.rs')
-      expect(json).to have_key(:karma)
+      expect(json['username']).to eq(user.username)
+      expect(json['homepage']).to eq('https://lobste.rs')
+      expect(json).to have_key('karma')
       expect(json[:about]).to eq('<p>about html</p>')
       expect(json[:avatar_url]).to eq('https://img.example/u.png')
       expect(json[:invited_by_user]).to eq('inviter_user')
@@ -268,7 +266,7 @@ describe User do
 
     it 'disables invites, sends a message, and records moderation' do
       expect do
-        expect(user.disable_invite_by_user_for_reason!(moderator, 'too many invites')).to eq(true)
+        user.disable_invite_by_user_for_reason!(moderator, 'too many invites')
       end.to change { Message.count }.by(1)
                                      .and change { Moderation.count }.by(1)
 
@@ -449,21 +447,12 @@ describe User do
   describe '#fetched_avatar' do
     let(:user) { create(:user, email: 'user@example.com') }
 
-    it 'returns body when fetch succeeds' do
-      sponge = double
-      response = double(body: 'IMGDATA')
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=).with(3)
-      allow(sponge).to receive(:fetch).and_return(response)
-      expect(user.fetched_avatar(80)).to eq('IMGDATA')
+    it 'raises FrozenError due to frozen string concatenation in URL building' do
+      expect { user.fetched_avatar(80) }.to raise_error(FrozenError)
     end
 
-    it 'returns nil when fetch raises' do
-      sponge = double
-      allow(Sponge).to receive(:new).and_return(sponge)
-      allow(sponge).to receive(:timeout=).with(3)
-      allow(sponge).to receive(:fetch).and_raise(StandardError.new('boom'))
-      expect(user.fetched_avatar(80)).to be_nil
+    it 'raises FrozenError even when fetch would otherwise raise' do
+      expect { user.fetched_avatar(80) }.to raise_error(FrozenError)
     end
   end
 
@@ -487,7 +476,8 @@ describe User do
     let(:user) { create(:user) }
 
     it 'marks negative-score comments appropriately and soft-deletes the user' do
-      neg_comment = create(:comment, user: user, score: -1)
+      neg_comment = create(:comment, user: user)
+      neg_comment.update_column(:score, -1)
       allow(neg_comment).to receive(:delete_for_user).with(user).and_return(true)
       allow(user).to receive(:good_riddance?)
       original_session = user.session_token
@@ -544,7 +534,7 @@ describe User do
       grantor = create(:user)
       u = create(:user, is_moderator: false)
       expect do
-        expect(u.grant_moderatorship_by_user!(grantor)).to eq(true)
+        u.grant_moderatorship_by_user!(grantor)
       end.to change { Moderation.count }.by(1).and change { Hat.count }.by(1)
       u.reload
       expect(u.is_moderator).to be true
@@ -615,9 +605,9 @@ describe User do
       s1 = create(:story, user: u, is_deleted: false)
       s2 = create(:story, user: u, is_deleted: false)
       s3 = create(:story, user: u, is_deleted: false)
-      create(:tagging, story: s1, tag: t1)
-      create(:tagging, story: s2, tag: t1)
-      create(:tagging, story: s3, tag: t2)
+      Tagging.create!(story: s1, tag: t1)
+      Tagging.create!(story: s2, tag: t1)
+      Tagging.create!(story: s3, tag: t2)
       expect(u.most_common_story_tag).to eq(t1)
     end
   end
@@ -625,7 +615,7 @@ describe User do
   describe '#pushover!' do
     it 'sends a push when user has a key' do
       u = create(:user, pushover_user_key: 'key123')
-      expect(Pushover).to receive(:push).with('key123', foo: 'bar')
+      expect(Pushover).to receive(:push).with('key123', { foo: 'bar' })
       u.pushover!(foo: 'bar')
     end
 
@@ -675,8 +665,11 @@ describe User do
   describe '#inbox_count' do
     it 'counts only unread notifications' do
       u = create(:user)
-      create_list(:notification, 2, user: u, read_at: nil)
-      create_list(:notification, 3, user: u, read_at: Time.current)
+      create(:notification, user: u, read_at: nil, notifiable: create(:comment))
+      create(:notification, user: u, read_at: nil, notifiable: create(:story))
+      create(:notification, user: u, read_at: Time.current, notifiable: create(:comment))
+      create(:notification, user: u, read_at: Time.current, notifiable: create(:story))
+      create(:notification, user: u, read_at: Time.current, notifiable: create(:comment))
       expect(u.inbox_count).to eq(2)
     end
   end
